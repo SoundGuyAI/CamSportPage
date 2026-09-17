@@ -12,10 +12,18 @@ type GlbFigureProps = {
   tint?: string
   /** Timestamp of the latest swing commit; a one-shot swing clip fires when it changes. */
   swingAtMs?: number | null
+  /** Playback rate for the swing clip — 1.4 for a bat cut, 0.9 for a pitcher's wind-up. */
+  swingTimeScale?: number
+  /** Timestamp at which to fire a celebration clip (ThumbsUp / Wave) once. */
+  celebrateAtMs?: number | null
 }
 
 const IDLE_RE = /idle/i
 const SWING_RE = /punch|swing|hit|attack|bat/i
+const CELEBRATE_RE = /thumb|wave|yes|dance|jump/i
+
+/** Team colour dominates the placeholder grey-yellow robot at 0.8. */
+const TINT_STRENGTH = 0.8
 
 /**
  * Loads a rigged glTF, normalises it to FIGURE_HEIGHT with feet on the ground,
@@ -23,27 +31,35 @@ const SWING_RE = /punch|swing|hit|attack|bat/i
  * so the same cached `useGLTF` scene can be mounted twice (batter + pitcher)
  * with independent AnimationMixers.
  */
-export function GlbFigure({ url, tint, swingAtMs }: GlbFigureProps) {
+export function GlbFigure({
+  url,
+  tint,
+  swingAtMs,
+  swingTimeScale = 1.4,
+  celebrateAtMs,
+}: GlbFigureProps) {
   const { scene, animations } = useGLTF(url)
   const group = useRef<Group>(null)
 
   const model = useMemo(() => {
     const copy = cloneSkinned(scene) as Object3D
-    if (tint) {
-      const color = new Color(tint)
-      const recolor = (m: Material) => {
-        const c = m.clone() as MeshStandardMaterial
-        if (c.color) c.color.lerp(color, 0.65)
-        return c
-      }
-      copy.traverse((o: Object3D) => {
-        const mesh = o as Mesh
-        if (!mesh.isMesh) return
-        mesh.material = Array.isArray(mesh.material)
-          ? mesh.material.map(recolor)
-          : recolor(mesh.material)
-      })
+    const color = tint ? new Color(tint) : null
+    const recolor = (m: Material) => {
+      const c = m.clone() as MeshStandardMaterial
+      if (color && c.color) c.color.lerp(color, TINT_STRENGTH)
+      return c
     }
+    copy.traverse((o: Object3D) => {
+      const mesh = o as Mesh
+      if (!mesh.isMesh) return
+      // oxlint-disable-next-line immutability -- three.js scene graph is mutable by design
+      mesh.castShadow = true
+      mesh.receiveShadow = false
+      if (!color) return
+      mesh.material = Array.isArray(mesh.material)
+        ? mesh.material.map(recolor)
+        : recolor(mesh.material)
+    })
     return copy
   }, [scene, tint])
 
@@ -83,6 +99,7 @@ export function GlbFigure({ url, tint, swingAtMs }: GlbFigureProps) {
 
   const idleName = useMemo(() => names.find((n) => IDLE_RE.test(n)) ?? names[0], [names])
   const swingName = useMemo(() => names.find((n) => SWING_RE.test(n)), [names])
+  const celebrateName = useMemo(() => names.find((n) => CELEBRATE_RE.test(n)), [names])
 
   useEffect(() => {
     const idle = idleName ? actions[idleName] : undefined
@@ -101,15 +118,47 @@ export function GlbFigure({ url, tint, swingAtMs }: GlbFigureProps) {
     swing.setLoop(LoopOnce, 1)
     // oxlint-disable-next-line immutability -- three.js AnimationAction is imperative by design
     swing.clampWhenFinished = true
-    swing.timeScale = 1.4
+    swing.timeScale = swingTimeScale
     swing.fadeIn(0.05).play()
-    const ms = (swing.getClip().duration / 1.4) * 1000
+    const ms = (swing.getClip().duration / swingTimeScale) * 1000
     const back = window.setTimeout(() => {
       swing.fadeOut(0.2)
       idle?.reset().fadeIn(0.2).play()
     }, ms)
     return () => window.clearTimeout(back)
-  }, [actions, swingAtMs, swingName, idleName])
+  }, [actions, swingAtMs, swingName, swingTimeScale, idleName])
+
+  // Celebration (ThumbsUp on a perfect hit): scheduled off the snapshot timestamp,
+  // so it fires at exactly `resolvedAtMs + 400` however late React renders.
+  useEffect(() => {
+    if (celebrateAtMs == null || !celebrateName) return
+    const clip = actions[celebrateName]
+    const idle = idleName ? actions[idleName] : undefined
+    if (!clip) return
+    let back = 0
+    const fire = window.setTimeout(
+      () => {
+        clip.reset()
+        clip.setLoop(LoopOnce, 1)
+        // oxlint-disable-next-line immutability -- three.js AnimationAction is imperative by design
+        clip.clampWhenFinished = true
+        clip.timeScale = 1
+        clip.fadeIn(0.12).play()
+        back = window.setTimeout(
+          () => {
+            clip.fadeOut(0.25)
+            idle?.reset().fadeIn(0.25).play()
+          },
+          clip.getClip().duration * 1000,
+        )
+      },
+      Math.max(0, celebrateAtMs - performance.now()),
+    )
+    return () => {
+      window.clearTimeout(fire)
+      window.clearTimeout(back)
+    }
+  }, [actions, celebrateAtMs, celebrateName, idleName])
 
   return (
     <group ref={group}>

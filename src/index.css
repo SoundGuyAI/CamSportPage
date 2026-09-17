@@ -1,7 +1,115 @@
-#root {
-  min-height: 100vh;
+/* ---------------------------------------------------------------------------
+   Fonts — self-hosted latin subsets (see public/fonts/LICENSE.md, OFL 1.1).
+   `url('/fonts/…')` is rewritten by Vite at build time to `/CamSportPage/…`,
+   so these resolve under the GitHub Pages base.
+   --------------------------------------------------------------------------- */
+
+@font-face {
+  font-family: 'Archivo Black';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/archivo-black-latin-400.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('/fonts/outfit-latin-var.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Metric-matched fallbacks: these render from a *local* face only (0 KB
+   download) with overridden metrics so the swap from fallback -> webfont does
+   not reflow. Values are eyeballed against each family's x-height / ascent
+   ratio, which is all `swap` needs to avoid a visible jump. */
+@font-face {
+  font-family: 'Outfit Fallback';
+  src: local('Segoe UI'), local('Roboto'), local('Helvetica Neue'), local('Arial');
+  size-adjust: 99%;
+  ascent-override: 100%;
+  descent-override: 25%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Archivo Fallback';
+  src: local('Segoe UI Black'), local('Arial Black'), local('Impact'), local('Arial');
+  size-adjust: 92%;
+  ascent-override: 96%;
+  descent-override: 24%;
+  line-gap-override: 0%;
+}
+
+/* ---------------------------------------------------------------------------
+   Palette — art-direction.md §2 "UI". Contrast ratios in the comments are
+   measured against the page base #0B1512 unless stated otherwise.
+   --------------------------------------------------------------------------- */
+
+:root {
+  /* surfaces */
+  --page: #0b1512;
+  --page-glow: #17402c;
+  --panel: #101e18;
+  --panel-92: rgb(16 30 24 / 92%);
+  --panel-line: #2e6b4c;
+  --chip: rgb(7 19 13 / 82%);
+  --ink: #07130d;
+
+  /* text */
+  --text: #f2f7f3; /* 17.1:1 on page, 15.9:1 on panel — AAA */
+  --text-2: #b7c8bc; /* 10.6:1 on page, 9.8:1 on panel — AAA */
+  --text-3: #9db0a4; /* 8.1:1 on page — AAA (used for the footer) */
+
+  /* states */
+  --perfect: #7dffb3; /* 13.8:1 on panel — AAA */
+  --warn: #ffc64d; /* 11.0:1 on panel — AAA */
+  --bad: #ff7a7a; /* 6.8:1 on panel — AA */
+
+  /* primary button */
+  --btn: #4de59a;
+  --btn-ink: #07130d; /* 11.7:1 on --btn — AAA */
+  --btn-press: #2fa972;
+
+  /* type */
+  --font-body: 'Outfit', 'Outfit Fallback', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Archivo Black', 'Archivo Fallback', 'Segoe UI', system-ui, sans-serif;
+
+  /* shared stage width, used by the HUD/readout so they line up with the scene */
+  --stage-w: min(960px, 92vw, calc(55vh * 16 / 9));
+
+  color: var(--text);
+  background: var(--page);
+  font-family: var(--font-body);
+  font-synthesis-weight: none;
+  line-height: 1.4;
+  -webkit-text-size-adjust: 100%;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
+  min-height: 100vh;
+  background: var(--page);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* One focus ring for the whole app: amber on every surface we use. */
+:where(button, input, [tabindex]):focus-visible {
+  outline: 3px solid var(--warn);
+  outline-offset: 2px;
+  border-radius: 6px;
 }

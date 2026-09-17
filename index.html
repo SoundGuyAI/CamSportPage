@@ -3,8 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0B1512" />
     <title>CamSport</title>
+    <!-- Self-hosted latin subsets (public/fonts, OFL 1.1). Vite rewrites these
+         public-dir hrefs under `base`, so they resolve at /CamSportPage/fonts/. -->
+    <link
+      rel="preload"
+      href="/fonts/archivo-black-latin-400.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/outfit-latin-var.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
   </head>
   <body>
     <div id="root"></div>

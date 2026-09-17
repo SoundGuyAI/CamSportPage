@@ -1,10 +1,17 @@
 import { Canvas } from '@react-three/fiber'
 import type { RootState } from '@react-three/fiber'
+import { useEffect, useMemo, useRef } from 'react'
+import { ACESFilmicToneMapping } from 'three'
+import type { DirectionalLight } from 'three'
+import { RESULT_HOLD_MS, WHIFF_HOLD_MS } from '../game/GameSession'
 import type { SessionSnapshot } from '../game/types'
+import { Backdrop } from './Backdrop'
 import { Ball } from './Ball'
 import { Batter } from './Batter'
-import { BATTER_POSITION, COLORS, PITCHER_POSITION } from './constants'
+import { CameraRig } from './CameraRig'
+import { BATTER_POSITION, CAMERA_FOV, CAMERA_POSITION, CAMERA_TARGET, COLORS, PITCHER_POSITION } from './constants'
 import { Field } from './Field'
+import { Impact } from './Impact'
 import { Pitcher } from './Pitcher'
 import './scene.css'
 
@@ -17,13 +24,58 @@ export type BattingSceneProps = {
   className?: string
 }
 
-/** Camera: behind and above the catcher, looking down the pitch toward the mound. */
-const CAMERA_POSITION: [number, number, number] = [2.4, 12.5, 29.5]
-const CAMERA_TARGET: [number, number, number] = [-0.2, 5.2, -42]
+/** ThumbsUp lag after a perfect result (ms). */
+const CELEBRATE_DELAY_MS = 400
 
-function aimCamera({ camera }: RootState) {
+/** Shadow map: 1024 over a tight ±34 ft box ≈ 15 px/ft on the batter. */
+const SHADOW_EXTENT = 34
+
+function aimCamera({ camera, gl }: RootState) {
   camera.lookAt(CAMERA_TARGET[0], CAMERA_TARGET[1], CAMERA_TARGET[2])
   camera.updateProjectionMatrix()
+  gl.toneMapping = ACESFilmicToneMapping
+  gl.toneMappingExposure = 1.05
+}
+
+/**
+ * The one sun. High and slightly camera-left, so the batter's shadow falls
+ * toward first base and the ball stays lit against the sky.
+ */
+function Sun() {
+  const light = useRef<DirectionalLight>(null)
+
+  useEffect(() => {
+    const l = light.current
+    if (!l) return
+    const cam = l.shadow.camera
+    cam.left = -SHADOW_EXTENT
+    cam.right = SHADOW_EXTENT
+    cam.top = SHADOW_EXTENT
+    cam.bottom = -SHADOW_EXTENT
+    cam.near = 40
+    cam.far = 260
+    cam.updateProjectionMatrix()
+    l.shadow.bias = -0.0006
+    l.shadow.normalBias = 0.02
+  }, [])
+
+  return (
+    <directionalLight
+      ref={light}
+      position={[-120, 180, 90]}
+      color={'#FFF6E0'}
+      intensity={2.1}
+      castShadow
+      shadow-mapSize={[1024, 1024]}
+    />
+  )
+}
+
+/** Device pixel ratio cap: chalk lines alias badly below 1.5 on a retina phone. */
+function dprRange(): [number, number] {
+  if (typeof window === 'undefined') return [1, 1.5]
+  const high = window.devicePixelRatio > 1 && window.innerWidth > 900
+  return [1, high ? 1.75 : 1.5]
 }
 
 /**
@@ -32,38 +84,60 @@ function aimCamera({ camera }: RootState) {
  * no imperative tweens, no randomness. See `demo.md` for units + mounting.
  */
 export function BattingScene({ snapshot, batterUrl, pitcherUrl, className }: BattingSceneProps) {
-  const swingAtMs =
-    snapshot.lastResult?.commit != null ? snapshot.lastResult.commit.atMs : null
+  const dpr = useMemo(() => dprRange(), [])
+
+  const last = snapshot.lastResult
+  const swingAtMs = last?.commit != null ? last.commit.atMs : null
+  const celebrateAtMs =
+    last != null && last.band === 'perfect' ? last.resolvedAtMs + CELEBRATE_DELAY_MS : null
   const releaseAtMs =
     snapshot.phase === 'pitching' && snapshot.current ? snapshot.current.startedAtMs : null
+  // The next release is predictable from the result hold, which lets the pitcher
+  // start his rock-back 260 ms before the ball leaves his hand.
+  const nextReleaseAtMs =
+    snapshot.phase === 'result' && last != null
+      ? last.resolvedAtMs +
+        (last.outcome.flightMs > 0 ? last.outcome.flightMs + RESULT_HOLD_MS : WHIFF_HOLD_MS)
+      : null
 
   return (
     <div className={className ? `camsport-scene ${className}` : 'camsport-scene'}>
       <Canvas
-        dpr={[1, 1.5]}
-        shadows={false}
+        dpr={dpr}
+        shadows
         gl={{ antialias: true, powerPreference: 'high-performance' }}
-        camera={{ fov: 36, near: 0.5, far: 1800, position: CAMERA_POSITION }}
+        camera={{ fov: CAMERA_FOV, near: 0.5, far: 2000, position: CAMERA_POSITION }}
         onCreated={aimCamera}
       >
-        <color attach="background" args={[COLORS.sky]} />
-        <fog attach="fog" args={[COLORS.sky, 320, 1100]} />
+        <fog attach="fog" args={[COLORS.skyHorizon, 340, 1200]} />
 
-        <ambientLight intensity={1.9} />
-        <hemisphereLight args={[COLORS.sky, COLORS.grass, 1.1]} />
-        <directionalLight position={[-60, 90, 40]} intensity={1.6} />
+        <ambientLight intensity={0.35} />
+        <hemisphereLight args={['#9FD0F5', '#4A8F3C', 0.9]} />
+        <Sun />
 
-        <Field />
+        <Backdrop />
+        <Field snapshot={snapshot} />
 
         <group position={BATTER_POSITION} rotation={[0, Math.PI / 2, 0]}>
-          <Batter url={batterUrl} swingAtMs={swingAtMs} />
+          <Batter
+            url={batterUrl}
+            swingAtMs={swingAtMs}
+            sway={snapshot.phase !== 'result'}
+            celebrateAtMs={celebrateAtMs}
+          />
         </group>
 
         <group position={PITCHER_POSITION}>
-          <Pitcher url={pitcherUrl ?? batterUrl} releaseAtMs={releaseAtMs} />
+          <Pitcher
+            url={pitcherUrl ?? batterUrl}
+            releaseAtMs={releaseAtMs}
+            nextReleaseAtMs={nextReleaseAtMs}
+          />
         </group>
 
         <Ball snapshot={snapshot} />
+        <Impact snapshot={snapshot} />
+        <CameraRig snapshot={snapshot} />
       </Canvas>
     </div>
   )

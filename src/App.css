@@ -1,47 +1,34 @@
-:root {
-  color: #f4f7f2;
-  background: #0f1a14;
-  font-family: 'Segoe UI', system-ui, sans-serif;
-  line-height: 1.4;
-
-  --perfect: #7dffb3;
-  --warn: #ffd27a;
-  --bad: #ff8f8f;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  min-height: 100vh;
-}
+/* CamSport UI — art-direction.md §2 (palette), §9 (HUD), §10 items 8 / 14 / 19.
+   Tokens live in index.css; this file is layout + motion only. */
 
 .app {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   background:
-    radial-gradient(ellipse at 50% 0%, #1d3a28 0%, transparent 55%),
-    #0f1a14;
+    radial-gradient(ellipse at 50% -10%, var(--page-glow) 0%, transparent 58%),
+    var(--page);
 }
 
 .header {
   text-align: center;
-  padding: 0.9rem 1rem 0.2rem;
+  padding: 0.9rem 1rem 0.35rem;
 }
 
 .header h1 {
   margin: 0;
-  font-size: 1.5rem;
-  letter-spacing: 0.04em;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(1.25rem, 3.4vw, 1.75rem);
+  letter-spacing: 0.02em;
+  color: var(--text);
 }
 
 .tagline {
-  margin: 0.2rem 0 0;
-  opacity: 0.7;
+  margin: 0.25rem 0 0;
+  color: var(--text-2);
   font-size: 0.85rem;
+  letter-spacing: 0.04em;
 }
 
 .field {
@@ -58,150 +45,310 @@ body {
   -webkit-user-select: none;
 }
 
-/* ---------- HUD ---------- */
+/* ---------- Stage (3D + every overlay) ---------- */
+
+.stage {
+  position: relative;
+  width: var(--stage-w);
+  border-radius: 12px;
+  /* Clips the vignette, the grain and the HUD to the scene's rounded frame. */
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* §9 overlays: vignette + grain, both inert. */
+.fx-vignette,
+.fx-grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.fx-vignette {
+  z-index: 2;
+  background: radial-gradient(ellipse at 50% 42%, transparent 55%, rgb(4 10 8 / 34%) 100%);
+}
+
+/* Item 19: 128² inline SVG feTurbulence tile, fixed seed (deterministic),
+   ~0.3 KB of CSS — no image request, no canvas. */
+.fx-grain {
+  z-index: 3;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch' seed='7'/%3E%3C/filter%3E%3Crect width='128' height='128' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-size: 128px 128px;
+  background-repeat: repeat;
+}
+
+/* ---------- HUD (§9: an overlay on the stage, not a row above it) ---------- */
 
 .hud {
-  width: min(960px, 92vw, calc(55vh * 16 / 9));
+  position: absolute;
+  z-index: 4;
+  inset: 0 0 auto;
   display: flex;
-  align-items: center;
-  gap: 0.9rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.65rem;
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  font-size: 0.95rem;
+  /* Never eat a swing: only the Restart button opts back in. */
+  pointer-events: none;
+}
+
+.hud-left,
+.hud-right {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.hud-left {
+  align-items: flex-start;
+}
+
+.hud-right {
+  align-items: flex-end;
+}
+
+/* Frosted pill behind every HUD cluster, so text keeps AA over sky or grass. */
+.hud-pitch,
+.hud-score,
+.dots {
+  background: var(--chip);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-radius: 999px;
 }
 
 .hud-pitch {
+  padding: 0.16rem 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-2); /* 6.7:1 over the pill on the brightest sky — AA */
   white-space: nowrap;
 }
 
 .hud-score {
-  margin-left: auto;
   display: inline-flex;
-  align-items: baseline;
-  gap: 0.4rem;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.16rem 0.7rem;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-2);
   white-space: nowrap;
 }
 
 .score {
   display: inline-block;
-  font-size: 1.3rem;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.6rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
   color: var(--perfect);
 }
 
 .score-bump {
-  animation: score-bump 420ms ease-out;
+  animation: score-bump 320ms cubic-bezier(0.16, 1.02, 0.3, 1);
 }
 
 @keyframes score-bump {
   0% {
     transform: scale(1);
   }
-  35% {
-    transform: scale(1.45);
-    filter: brightness(1.4);
+  40% {
+    transform: scale(1.28);
   }
   100% {
     transform: scale(1);
   }
 }
 
+/* ---------- Pitch pills ---------- */
+
 .dots {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0.28rem 0.42rem;
   display: flex;
-  gap: 0.3rem;
+  gap: 0.28rem;
 }
 
 .dot {
-  width: 0.7rem;
-  height: 0.7rem;
-  border-radius: 50%;
-  background: #24392c;
-  border: 1px solid #3d6b4f;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: rgb(242 247 243 / 16%);
+  outline: 2px solid transparent;
+  outline-offset: 1px;
   transition: background-color 180ms ease;
 }
 
+/* Animate outline-color alpha only — cheaper than a box-shadow keyframe. */
 .dot-live {
-  border-color: var(--warn);
   animation: dot-live 900ms ease-in-out infinite;
 }
 
 @keyframes dot-live {
+  0%,
+  100% {
+    outline-color: rgb(255 198 77 / 25%);
+  }
   50% {
-    box-shadow: 0 0 0 3px rgb(255 210 122 / 25%);
+    outline-color: rgb(255 198 77 / 100%);
   }
 }
 
 .dot-perfect {
   background: var(--perfect);
-  border-color: var(--perfect);
 }
 
 .dot-early,
 .dot-late {
   background: var(--warn);
-  border-color: var(--warn);
 }
 
 .dot-miss {
   background: var(--bad);
-  border-color: var(--bad);
 }
 
-/* ---------- Stage (3D + overlays) ---------- */
+/* ---------- Swing meter (§9) ---------- */
 
-.stage {
+.meter {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: calc(0.7rem + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  width: min(180px, 46%);
+  pointer-events: none;
+}
+
+.meter-track {
   position: relative;
-  width: min(960px, 92vw, calc(55vh * 16 / 9));
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--chip);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: inset 0 0 0 1px rgb(242 247 243 / 14%);
 }
 
-/* Transient timing feedback over the scene. Never intercepts the swing. */
+/* ±140 ms contact window, then the ±50 ms perfect slice inside it. */
+.meter-contact {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgb(255 198 77 / 58%);
+}
+
+.meter-perfect {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--perfect);
+}
+
+/* Full-width runner: translateX(100%) of its own box == the track width, so
+   the head sweeps exactly one track length with a single composited transform. */
+.meter-runner {
+  position: absolute;
+  inset: 0;
+  animation-name: meter-sweep;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  animation-iteration-count: 1;
+  will-change: transform;
+}
+
+@keyframes meter-sweep {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.meter-head {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  left: 0;
+  width: 3px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: var(--text);
+  box-shadow: 0 0 0 1px rgb(7 19 13 / 70%);
+}
+
+/* ---------- Result flash (§9 retype + motion) ---------- */
+
 .flash {
   position: absolute;
   inset: 0;
+  z-index: 5;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.2rem;
+  gap: 0.35rem;
   pointer-events: none;
   text-align: center;
   opacity: 0;
-  animation: flash 900ms ease-out forwards;
-  text-shadow: 0 2px 10px rgb(0 0 0 / 65%);
+  animation: flash 860ms cubic-bezier(0.16, 1.02, 0.3, 1) forwards;
 }
 
 .flash strong {
-  font-size: clamp(2rem, 7vw, 4rem);
-  font-weight: 800;
-  letter-spacing: 0.06em;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(2.4rem, 8vw, 4.6rem);
+  line-height: 1;
+  letter-spacing: 0.02em;
+  -webkit-text-stroke: 3px rgb(7 19 13 / 85%);
+  paint-order: stroke fill;
+  text-shadow: 0 6px 0 rgb(7 19 13 / 35%);
 }
 
+/* The sub-line has no stroke, so it rides its own pill: #F2F7F3 on the chip is
+   10.8:1 even when the pill sits over the brightest patch of sky. */
 .flash span {
+  padding: 0.16rem 0.65rem;
+  border-radius: 999px;
+  background: var(--chip);
   font-size: clamp(0.9rem, 2vw, 1.15rem);
   font-weight: 600;
-  color: #fff;
+  letter-spacing: 0.02em;
+  color: var(--text);
 }
 
 @keyframes flash {
   0% {
     opacity: 0;
-    transform: scale(0.75);
+    transform: scale(0.72) rotate(-3deg);
   }
-  18% {
+  8% {
     opacity: 1;
-    transform: scale(1.06);
   }
-  32% {
-    transform: scale(1);
-  }
-  70% {
+  14% {
     opacity: 1;
+    transform: scale(1.1) rotate(1deg);
+  }
+  26%,
+  68% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
   }
   100% {
     opacity: 0;
-    transform: scale(1.02);
+    transform: scale(1.04) rotate(0deg);
   }
 }
 
@@ -218,44 +365,83 @@ body {
   color: var(--bad);
 }
 
-/* Start / end cards float over the scene, which stays visible behind. */
+/* One-shot green wash across the stage on a perfect. */
+.flash-perfect::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 55%, rgb(125 255 179 / 12%), transparent 70%);
+  animation: flash-wash 300ms ease-out forwards;
+}
+
+@keyframes flash-wash {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ---------- Start / end cards (§9) ---------- */
+
 .card {
   position: absolute;
   inset: 0;
+  z-index: 6;
   margin: auto;
-  width: min(380px, 88%);
+  width: min(392px, 88%);
   height: fit-content;
   max-height: 100%;
   overflow: auto;
-  border: 2px solid #3d6b4f;
-  border-radius: 14px;
-  background: rgb(15 26 20 / 88%);
-  backdrop-filter: blur(3px);
-  padding: 1.1rem 1.25rem;
+  border: 2px solid var(--panel-line);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgb(16 30 24 / 94%), rgb(11 21 18 / 94%));
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  padding: 1.15rem 1.3rem 1.3rem;
   text-align: center;
-  box-shadow: 0 12px 40px rgb(0 0 0 / 45%);
+  box-shadow:
+    0 18px 60px rgb(0 0 0 / 55%),
+    inset 0 1px 0 rgb(255 255 255 / 8%);
+}
+
+.card-eyebrow {
+  margin: 0 0 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--perfect);
 }
 
 .card h2 {
-  margin: 0 0 0.5rem;
-  font-size: 1.25rem;
+  margin: 0 0 0.6rem;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.6rem;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+  color: var(--text);
 }
 
 .card-how {
-  margin: 0 0 0.35rem;
+  margin: 0 0 0.4rem;
   font-size: 1rem;
+  color: var(--text);
 }
 
 .card-sub {
-  margin: 0 0 0.75rem;
+  margin: 0 0 0.8rem;
   font-size: 0.85rem;
-  opacity: 0.7;
+  color: var(--text-2);
 }
 
 .final {
   margin: 0;
-  font-size: 2.6rem;
-  font-weight: 800;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 3.2rem;
   line-height: 1;
   color: var(--perfect);
   font-variant-numeric: tabular-nums;
@@ -265,20 +451,21 @@ body {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 0.4rem;
-  margin: 0 0 0.75rem;
+  margin: 0 0 0.8rem;
 }
 
 .tally dt {
   font-size: 0.7rem;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  opacity: 0.65;
+  letter-spacing: 0.08em;
+  color: var(--text-2);
 }
 
 .tally dd {
-  margin: 0.1rem 0 0;
-  font-size: 1.25rem;
-  font-weight: 700;
+  margin: 0.12rem 0 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.3rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -295,19 +482,19 @@ body {
   color: var(--bad);
 }
 
-/* ---------- Readout ---------- */
+/* ---------- Readout (kept below the stage: aria-live status line) ---------- */
 
 .readout {
-  width: min(960px, 92vw, calc(55vh * 16 / 9));
+  width: var(--stage-w);
   min-height: 3.1rem;
   text-align: center;
 }
 
 .cue {
   margin: 0;
-  font-size: 0.95rem;
-  opacity: 0.6;
-  letter-spacing: 0.08em;
+  font-size: 0.9rem;
+  color: var(--text-2);
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
@@ -338,29 +525,46 @@ body {
 .primary {
   appearance: none;
   border: none;
-  border-radius: 8px;
-  padding: 0.7rem 1.4rem;
-  font: inherit;
+  border-radius: 999px;
+  padding: 0.8rem 1.6rem;
+  font-family: inherit;
+  font-size: 1rem;
   font-weight: 700;
+  letter-spacing: 0.02em;
   cursor: pointer;
-  color: #0f1a14;
-  background: var(--perfect);
+  color: var(--btn-ink);
+  background: var(--btn);
+  box-shadow: 0 4px 0 var(--btn-press);
+  transition:
+    transform 80ms ease,
+    filter 120ms ease;
 }
 
 .primary:hover {
-  filter: brightness(1.05);
+  filter: brightness(1.06);
+}
+
+/* A physical toy press. */
+.primary:active {
+  transform: translateY(2px);
+  box-shadow: none;
 }
 
 .ghost {
   appearance: none;
-  border: 1px solid #3d6b4f;
-  border-radius: 6px;
-  padding: 0.25rem 0.6rem;
-  font: inherit;
-  font-size: 0.8rem;
+  pointer-events: auto;
+  border: 1px solid var(--panel-line);
+  border-radius: 999px;
+  padding: 0.18rem 0.62rem;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   cursor: pointer;
-  color: #cfe6d7;
-  background: transparent;
+  color: var(--text-2);
+  background: var(--chip);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .ghost:hover {
@@ -371,108 +575,65 @@ body {
 .footer {
   text-align: center;
   padding: 0.6rem 1rem 0.9rem;
-  opacity: 0.5;
+  color: var(--text-3); /* 8.1:1 on the page base — AAA */
   font-size: 0.72rem;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .score-bump,
-  .dot-live {
-    animation: none;
-  }
-
-  /* Keep the fade (it has to clear itself) but drop the scale pop. */
-  .flash {
-    animation-name: flash-fade;
-  }
-
-  @keyframes flash-fade {
-    0%,
-    70% {
-      opacity: 1;
-    }
-    100% {
-      opacity: 0;
-    }
-  }
-}
-
-/* Narrow / portrait: stack the HUD, let the page scroll if it must. */
-@media (max-width: 560px) {
-  .hud {
-    flex-wrap: wrap;
-    gap: 0.5rem 0.75rem;
-    font-size: 0.85rem;
-  }
-
-  .hud,
-  .stage,
-  .readout {
-    width: min(960px, 96vw);
-  }
-
-  .field {
-    justify-content: flex-start;
-    padding: 0.5rem;
-  }
 }
 
 /* ---------- Input-mode segmented control ---------- */
 
 .seg {
   display: flex;
-  gap: 0;
-  margin: 0 auto 0.7rem;
+  margin: 0 auto 0.8rem;
   width: fit-content;
-  border: 1px solid #3d6b4f;
-  border-radius: 8px;
+  border: 1px solid var(--panel-line);
+  border-radius: 999px;
   overflow: hidden;
 }
 
 .seg-btn {
   appearance: none;
   border: none;
-  padding: 0.35rem 0.7rem;
-  font: inherit;
+  padding: 0.38rem 0.8rem;
+  font-family: inherit;
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
-  color: #cfe6d7;
+  color: var(--text-2);
   background: transparent;
 }
 
 .seg-btn + .seg-btn {
-  border-left: 1px solid #3d6b4f;
+  border-left: 1px solid var(--panel-line);
 }
 
 .seg-btn:hover {
   color: var(--perfect);
 }
 
-.seg-on {
-  color: #0f1a14;
-  background: var(--perfect);
-}
-
+.seg-on,
 .seg-on:hover {
-  color: #0f1a14;
+  color: var(--btn-ink);
+  background: var(--btn);
 }
 
-/* ---------- Camera panel (top-right of the stage) ---------- */
+/* ---------- Camera panel ----------
+   Bottom-left of the stage: the top-right corner now belongs to the score. */
 
 .campanel {
   position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  z-index: 3;
+  left: 0.55rem;
+  bottom: calc(0.55rem + env(safe-area-inset-bottom, 0px));
+  z-index: 4;
   width: 200px;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.35rem;
-  border: 1px solid #3d6b4f;
-  border-radius: 10px;
-  background: rgb(15 26 20 / 70%);
+  gap: 0.28rem;
+  padding: 0.38rem;
+  border: 1px solid var(--panel-line);
+  border-radius: 12px;
+  background: var(--chip);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   font-size: 0.68rem;
   /* Never eat a swing: only the sensitivity slider is interactive. */
   pointer-events: none;
@@ -487,8 +648,8 @@ body {
   width: 100%;
   aspect-ratio: 4 / 3;
   overflow: hidden;
-  border-radius: 6px;
-  background: #0b120e;
+  border-radius: 8px;
+  background: var(--ink);
 }
 
 .cam-video,
@@ -517,7 +678,7 @@ body {
   position: absolute;
   inset: 0;
   border: 3px solid var(--perfect);
-  border-radius: 6px;
+  border-radius: 8px;
   opacity: 0;
   animation: cam-fire 320ms ease-out forwards;
 }
@@ -534,15 +695,15 @@ body {
 .cam-energy {
   position: relative;
   height: 7px;
-  border-radius: 4px;
-  background: #1b2b21;
+  border-radius: 999px;
+  background: rgb(242 247 243 / 12%);
   overflow: hidden;
 }
 
 .cam-energy-fill {
   position: absolute;
   inset: 0 auto 0 0;
-  background: linear-gradient(90deg, #4f9f74, var(--perfect));
+  background: linear-gradient(90deg, #2fa972, var(--perfect));
   transition: width 60ms linear;
 }
 
@@ -558,20 +719,19 @@ body {
 
 .cam-status {
   margin: 0;
-  opacity: 0.8;
+  color: var(--text-2);
   line-height: 1.25;
 }
 
 .cam-status-warn {
   color: var(--warn);
-  opacity: 1;
 }
 
 .cam-slider {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  opacity: 0.8;
+  color: var(--text-2);
 }
 
 .cam-slider span {
@@ -584,7 +744,41 @@ body {
   accent-color: var(--perfect);
 }
 
+/* ---------- Reduced motion ---------- */
+
 @media (prefers-reduced-motion: reduce) {
+  .score-bump,
+  .dot-live,
+  .flash-perfect::before {
+    animation: none;
+  }
+
+  .dot-live {
+    outline-color: var(--warn);
+  }
+
+  .primary {
+    transition: none;
+  }
+
+  /* Keep the fade (the flash has to clear itself) but drop the pop and spin. */
+  .flash {
+    animation-name: flash-fade;
+  }
+
+  @keyframes flash-fade {
+    0% {
+      opacity: 0;
+    }
+    8%,
+    68% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+
   .cam-fire {
     animation-name: cam-fire-hold;
   }
@@ -598,11 +792,81 @@ body {
       opacity: 0;
     }
   }
+
+  /* The meter sweep is informational, not decoration — it stays. */
 }
 
+/* ---------- Narrow / portrait (§9, item 19) ----------
+   Below 560 px the stage becomes 4:5 so the batter and the mound both stay in
+   frame. The scene owns `aspect-ratio` in scene.css; this overrides it from the
+   UI layer only, and only for portrait. */
+
 @media (max-width: 560px) {
+  .stage,
+  .readout {
+    width: min(960px, 96vw);
+  }
+
+  .stage .camsport-scene {
+    aspect-ratio: 4 / 5;
+  }
+
+  .field {
+    justify-content: flex-start;
+    padding: 0.5rem;
+  }
+
+  .header {
+    padding: 0.6rem 1rem 0.2rem;
+  }
+
+  /* HUD collapses to a single row across the top. */
+  .hud {
+    align-items: center;
+    padding: 0.4rem 0.45rem;
+  }
+
+  .hud-left,
+  .hud-right {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .hud-pitch {
+    padding: 0.12rem 0.45rem;
+    font-size: 0.58rem;
+    letter-spacing: 0.04em;
+  }
+
+  .hud-score {
+    padding: 0.12rem 0.5rem;
+    font-size: 0.56rem;
+    gap: 0.3rem;
+  }
+
+  .dots {
+    padding: 0.22rem 0.34rem;
+    gap: 0.22rem;
+  }
+
+  .dot {
+    width: 0.45rem;
+    height: 0.45rem;
+  }
+
+  .score {
+    font-size: 1.25rem;
+  }
+
+  .meter {
+    width: min(180px, 62%);
+    bottom: calc(0.6rem + env(safe-area-inset-bottom, 0px));
+  }
+
   .campanel {
     width: 132px;
     font-size: 0.6rem;
+    bottom: calc(1.9rem + env(safe-area-inset-bottom, 0px));
   }
 }

@@ -16,6 +16,7 @@ import {
   type InputMode,
 } from './input/createInput'
 import { BattingScene } from './scene'
+import { SwingMeter } from './ui/SwingMeter'
 
 const TOTAL_PITCHES = 10
 
@@ -220,45 +221,52 @@ function App() {
       </header>
 
       <main className="field" role="application" aria-label="Batting lane">
-        <div className="hud">
-          <span className="hud-pitch">
-            {snap.finished
-              ? `Round over — ${snap.totalPitches} / ${snap.totalPitches}`
-              : snap.running
-                ? `Pitch ${pitchNumber} / ${snap.totalPitches}`
-                : `${snap.totalPitches} pitches`}
-          </span>
-
-          <ol className="dots" aria-label="Pitch results">
-            {Array.from({ length: snap.totalPitches }, (_, i) => {
-              const done = snap.completed[i]
-              const live = !done && snap.running && pitchNumber === i + 1
-              return (
-                <li
-                  key={i}
-                  className={`dot${done ? ` dot-${done.band}` : ''}${live ? ' dot-live' : ''}`}
-                  title={done ? `Pitch ${i + 1}: ${done.band}` : `Pitch ${i + 1}`}
-                />
-              )
-            })}
-          </ol>
-
-          <span className="hud-score">
-            Score
-            <b className={snap.score > 0 ? 'score score-bump' : 'score'} key={snap.score}>
-              {snap.score}
-            </b>
-          </span>
-
-          {snap.running ? (
-            <button type="button" className="ghost" onClick={startRound}>
-              Restart
-            </button>
-          ) : null}
-        </div>
-
         <div className="stage">
           <BattingScene snapshot={snap} batterUrl={BATTER_URL} />
+
+          {/* §9: the HUD sits *on* the stage so the 16:9 frame is the product. */}
+          <div className="hud">
+            <div className="hud-left">
+              <span className="hud-pitch">
+                {snap.finished
+                  ? `Round over — ${snap.totalPitches} / ${snap.totalPitches}`
+                  : snap.running
+                    ? `Pitch ${pitchNumber} / ${snap.totalPitches}`
+                    : `${snap.totalPitches} pitches`}
+              </span>
+
+              <ol className="dots" aria-label="Pitch results">
+                {Array.from({ length: snap.totalPitches }, (_, i) => {
+                  const done = snap.completed[i]
+                  const live = !done && snap.running && pitchNumber === i + 1
+                  return (
+                    <li
+                      key={i}
+                      className={`dot${done ? ` dot-${done.band}` : ''}${live ? ' dot-live' : ''}`}
+                      title={done ? `Pitch ${i + 1}: ${done.band}` : `Pitch ${i + 1}`}
+                    />
+                  )
+                })}
+              </ol>
+            </div>
+
+            <div className="hud-right">
+              <span className="hud-score">
+                Score
+                <b className={snap.score > 0 ? 'score score-bump' : 'score'} key={snap.score}>
+                  {snap.score}
+                </b>
+              </span>
+
+              {snap.running ? (
+                <button type="button" className="ghost" onClick={startRound}>
+                  Restart
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <SwingMeter snapshot={snap} />
 
           {mode === 'camera' ? (
             <div className="campanel">
@@ -314,6 +322,7 @@ function App() {
 
           {showStart ? (
             <div className="card">
+              <p className="card-eyebrow">Batting practice</p>
               <h2>CamSport — Batting</h2>
               {modePicker}
               <p className="card-how">{howToSwing}</p>
@@ -331,6 +340,7 @@ function App() {
 
           {snap.finished ? (
             <div className="card">
+              <p className="card-eyebrow">Batting practice</p>
               <h2>Round complete</h2>
               <p className="final">{snap.score}</p>
               <p className="card-sub">final score</p>
@@ -361,6 +371,10 @@ function App() {
               </button>
             </div>
           ) : null}
+
+          {/* §9 / item 19: inert film overlays — vignette then a 128² grain tile. */}
+          <div className="fx-vignette" aria-hidden="true" />
+          <div className="fx-grain" aria-hidden="true" />
         </div>
 
         <div className="readout">

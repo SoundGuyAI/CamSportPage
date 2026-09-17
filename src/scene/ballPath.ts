@@ -88,3 +88,16 @@ function lerpPitch(t: number): { x: number; y: number; z: number } {
     z: RELEASE_POINT[2] + (CONTACT_POINT[2] - RELEASE_POINT[2]) * t,
   }
 }
+
+/**
+ * Unclamped pitch progress (0 at release, 1 at the plate), used by the timing
+ * ring so it can keep reading past `contactAtMs` — the contact window runs to
+ * t = 1.108 and the perfect window to t = 1.038. -1 when no pitch is live.
+ */
+export function pitchProgress(snapshot: SessionSnapshot, nowMs: number): number {
+  const { phase, current } = snapshot
+  if (phase !== 'pitching' || !current) return -1
+  const span = Math.max(1, current.contactAtMs - current.startedAtMs)
+  const t = (nowMs - current.startedAtMs) / span
+  return t < 0 ? 0 : t > 1.25 ? 1.25 : t
+}

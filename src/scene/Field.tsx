@@ -1,20 +1,32 @@
-import { useMemo } from 'react'
-import { DoubleSide, Shape } from 'three'
+import { useFrame } from '@react-three/fiber'
+import { useEffect, useMemo, useRef } from 'react'
+import { BufferAttribute, BufferGeometry, DoubleSide, Shape } from 'three'
+import type { MeshStandardMaterial } from 'three'
+import type { SessionSnapshot } from '../game/types'
 import {
+  BASE_POSITIONS,
   COLORS,
-  FENCE_CENTER_FT,
+  DEG,
   FENCE_HEIGHT,
   FENCE_LINE_FT,
   FOUL_DEG,
   MOUND_DISTANCE,
+  WALL_KICK_H,
+  WALL_PAD_H,
+  fenceRadius,
 } from './constants'
-
-const DEG = Math.PI / 180
+import {
+  FIELD_MAP_CENTER_Z,
+  FIELD_MAP_FT,
+  distanceMarkerTexture,
+  fieldMapTexture,
+} from './textures'
+import { useGeneratedTexture } from './useGeneratedTexture'
 
 /** Home-plate pentagon (17" wide) drawn in the XZ plane, scaled to feet. */
 function usePlateShape() {
   return useMemo(() => {
-    const w = 0.71 // 17in / 2 in feet
+    const w = 0.71 // 17in / 2, in feet
     const s = new Shape()
     s.moveTo(-w, -w)
     s.lineTo(w, -w)
@@ -26,110 +38,199 @@ function usePlateShape() {
   }, [])
 }
 
-/** A flat chalk line from the plate out to `length` ft at `deg` off center. */
-function FoulLine({ deg, length }: { deg: number; length: number }) {
+const WALL_SEGMENTS = 64
+
+/**
+ * One horizontal band of the outfield wall, swept along the fence arc between
+ * two heights. UVs run 0..1 along the arc so a banded texture would tile, but
+ * the bands are flat colours today.
+ */
+function wallBandGeometry(y0: number, y1: number): BufferGeometry {
+  const pos: number[] = []
+  const uv: number[] = []
+  for (let i = 0; i < WALL_SEGMENTS; i++) {
+    const k0 = i / WALL_SEGMENTS
+    const k1 = (i + 1) / WALL_SEGMENTS
+    const d0 = -FOUL_DEG + k0 * FOUL_DEG * 2
+    const d1 = -FOUL_DEG + k1 * FOUL_DEG * 2
+    const r0 = fenceRadius(d0)
+    const r1 = fenceRadius(d1)
+    const x0 = Math.sin(d0 * DEG) * r0
+    const z0 = -Math.cos(d0 * DEG) * r0
+    const x1 = Math.sin(d1 * DEG) * r1
+    const z1 = -Math.cos(d1 * DEG) * r1
+    pos.push(x0, y0, z0, x1, y0, z1, x1, y1, z1)
+    pos.push(x0, y0, z0, x1, y1, z1, x0, y1, z0)
+    uv.push(k0, 0, k1, 0, k1, 1)
+    uv.push(k0, 0, k1, 1, k0, 1)
+  }
+  const geom = new BufferGeometry()
+  geom.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3))
+  geom.setAttribute('uv', new BufferAttribute(new Float32Array(uv), 2))
+  geom.computeVertexNormals()
+  return geom
+}
+
+function useWallBands() {
+  const bands = useMemo(
+    () => ({
+      kick: wallBandGeometry(0, WALL_KICK_H),
+      pad: wallBandGeometry(WALL_KICK_H, WALL_PAD_H),
+      rail: wallBandGeometry(WALL_PAD_H, FENCE_HEIGHT),
+    }),
+    [],
+  )
+  useEffect(
+    () => () => {
+      bands.kick.dispose()
+      bands.pad.dispose()
+      bands.rail.dispose()
+    },
+    [bands],
+  )
+  return bands
+}
+
+/** Yellow foul pole with a fair-side screen fin, at the 330-ft line ends. */
+function FoulPole({ deg }: { deg: number }) {
+  const r = FENCE_LINE_FT
+  const x = Math.sin(deg * DEG) * r
+  const z = -Math.cos(deg * DEG) * r
+  // inward (toward the plate) unit vector
+  const ix = -Math.sin(deg * DEG)
+  const iz = Math.cos(deg * DEG)
+  return (
+    <group position={[x, 0, z]}>
+      <mesh position={[0, 17, 0]}>
+        <cylinderGeometry args={[0.5, 0.5, 34, 8]} />
+        <meshStandardMaterial color={COLORS.wallRail} roughness={0.6} />
+      </mesh>
+      <mesh position={[ix * 2.6, 20, iz * 2.6]} rotation={[0, (deg - 180) * DEG, 0]}>
+        <boxGeometry args={[5, 24, 0.2]} />
+        <meshStandardMaterial
+          color={COLORS.wallRail}
+          roughness={0.7}
+          transparent
+          opacity={0.72}
+          side={DoubleSide}
+        />
+      </mesh>
+    </group>
+  )
+}
+
+const MARKERS: [string, number][] = [
+  ['330', -45],
+  ['375', -22],
+  ['400', 0],
+  ['375', 22],
+  ['330', 45],
+]
+
+function DistanceMarker({ text, deg }: { text: string; deg: number }) {
+  const factory = useMemo(() => () => distanceMarkerTexture(text), [text])
+  const map = useGeneratedTexture(factory)
+  const r = fenceRadius(deg) - 1.8
   return (
     <mesh
-      position={[
-        (Math.sin(deg * DEG) * length) / 2,
-        0.22,
-        (-Math.cos(deg * DEG) * length) / 2,
-      ]}
-      rotation={[-Math.PI / 2, 0, -deg * DEG]}
+      position={[Math.sin(deg * DEG) * r, 4.6, -Math.cos(deg * DEG) * r]}
+      rotation={[0, -deg * DEG, 0]}
     >
-      <planeGeometry args={[0.9, length]} />
-      <meshBasicMaterial color={COLORS.chalk} />
+      <planeGeometry args={[9, 5]} />
+      <meshBasicMaterial map={map} transparent depthWrite={false} toneMapped={false} />
     </mesh>
   )
 }
 
-/**
- * Stylized, flat-shaded ballpark. Everything is a disc, plane or arc — no
- * textures, no shadows, nothing that costs a draw call it doesn't have to.
- * See `constants.ts` for the unit + axis conventions (1 unit = 1 ft, -Z = center field).
- */
-export function Field() {
-  const plate = usePlateShape()
+/** Wall padding emissive flash for the home-run celebration (0 → 0.9 → 0 over 420 ms). */
+const HR_FLASH_MS = 420
 
-  // Outfield fence: an arc sampled between the foul poles, bulging to
-  // FENCE_CENTER_FT at dead center.
-  const fenceGeom = useMemo(() => {
-    const segments = 48
-    const pts: number[] = []
-    for (let i = 0; i <= segments; i++) {
-      const k = i / segments
-      const deg = -FOUL_DEG + k * FOUL_DEG * 2
-      const bulge = Math.cos(deg * DEG * 2) * 0.5 + 0.5
-      const r = FENCE_LINE_FT + (FENCE_CENTER_FT - FENCE_LINE_FT) * bulge
-      pts.push(Math.sin(deg * DEG) * r, -Math.cos(deg * DEG) * r)
+/**
+ * The park: one procedural field map on a single plane, plus the pieces that
+ * need real height (mound, plate, bases, banded wall, foul poles, markers).
+ * See `demo.md` for the coordinate + texture constants.
+ */
+export function Field({ snapshot }: { snapshot: SessionSnapshot }) {
+  const plate = usePlateShape()
+  const bands = useWallBands()
+  const fieldMap = useGeneratedTexture(fieldMapTexture)
+  const padMat = useRef<MeshStandardMaterial>(null)
+
+  useFrame(() => {
+    const mat = padMat.current
+    if (!mat) return
+    const res = snapshot.lastResult
+    let glow = 0
+    if (res && res.outcome.kind === 'homer') {
+      const k = (performance.now() - res.resolvedAtMs) / HR_FLASH_MS
+      if (k >= 0 && k <= 1) glow = Math.sin(Math.PI * k) * 0.9
     }
-    const positions: number[] = []
-    for (let i = 0; i < segments; i++) {
-      const x0 = pts[i * 2]
-      const z0 = pts[i * 2 + 1]
-      const x1 = pts[i * 2 + 2]
-      const z1 = pts[i * 2 + 3]
-      // two triangles per segment (quad standing on the ground)
-      positions.push(
-        x0, 0, z0, x1, 0, z1, x1, FENCE_HEIGHT, z1,
-        x0, 0, z0, x1, FENCE_HEIGHT, z1, x0, FENCE_HEIGHT, z0,
-      )
-    }
-    return new Float32Array(positions)
-  }, [])
+    if (mat.emissiveIntensity !== glow) mat.emissiveIntensity = glow
+  })
 
   return (
     <group>
-      {/* Grass */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.6, -120]}>
-        <planeGeometry args={[1600, 1600]} />
-        <meshLambertMaterial color={COLORS.grass} />
+      {/* Far ground: catches everything past the field map and fades into the fog. */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.14, -200]}>
+        <planeGeometry args={[2200, 2200]} />
+        <meshStandardMaterial color={COLORS.outfieldRim} roughness={0.95} />
       </mesh>
 
-      {/* Dirt infield arc around the plate */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
-        <circleGeometry args={[95, 48]} />
-        <meshLambertMaterial color={COLORS.dirt} />
+      {/* The field map: mow fan, clay, infield diamond, base paths, chalk, warning track. */}
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, -0.02, FIELD_MAP_CENTER_Z]}
+        receiveShadow
+      >
+        <planeGeometry args={[FIELD_MAP_FT, FIELD_MAP_FT]} />
+        <meshStandardMaterial map={fieldMap} roughness={0.88} metalness={0} />
       </mesh>
 
-      {/* Infield grass cut-out so the dirt reads as a skinned infield */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, -62]}>
-        <circleGeometry args={[52, 40]} />
-        <meshLambertMaterial color={COLORS.grass} />
+      {/* Mound + rubber */}
+      <mesh position={[0, 0.41, -MOUND_DISTANCE]} castShadow receiveShadow>
+        <cylinderGeometry args={[9, 10, 0.83, 32]} />
+        <meshStandardMaterial color={COLORS.clayDark} roughness={0.9} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.84, -MOUND_DISTANCE - 0.2]}>
+        <planeGeometry args={[1, 0.5]} />
+        <meshBasicMaterial color={COLORS.chalk} />
       </mesh>
 
-      {/* Mound */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.12, -MOUND_DISTANCE]}>
-        <circleGeometry args={[9, 32]} />
-        <meshLambertMaterial color={COLORS.dirtDark} />
-      </mesh>
-      <mesh position={[0, 0.45, -MOUND_DISTANCE]}>
-        <cylinderGeometry args={[7.5, 9, 0.7, 32]} />
-        <meshLambertMaterial color={COLORS.dirtDark} />
-      </mesh>
-
-      {/* Batter's box outline + plate */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.2, 0]}>
+      {/* Plate + bases */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
         <shapeGeometry args={[plate]} />
         <meshBasicMaterial color={COLORS.chalk} />
       </mesh>
-      {[-2.8, 2.8].map((x) => (
-        <mesh key={x} rotation={[-Math.PI / 2, 0, 0]} position={[x, 0.16, 0.5]}>
-          <ringGeometry args={[2.05, 2.2, 4, 1, Math.PI / 4]} />
-          <meshBasicMaterial color={COLORS.chalk} side={DoubleSide} />
+      {BASE_POSITIONS.map((p) => (
+        <mesh key={`${p[0]}:${p[2]}`} position={p} castShadow>
+          <boxGeometry args={[1.25, 0.25, 1.25]} />
+          <meshStandardMaterial color={COLORS.chalk} roughness={0.8} />
         </mesh>
       ))}
 
-      <FoulLine deg={-FOUL_DEG} length={FENCE_LINE_FT} />
-      <FoulLine deg={FOUL_DEG} length={FENCE_LINE_FT} />
-
-      {/* Outfield fence */}
-      <mesh>
-        <bufferGeometry>
-          <bufferAttribute attach="attributes-position" args={[fenceGeom, 3]} />
-        </bufferGeometry>
-        <meshBasicMaterial color={COLORS.fence} side={DoubleSide} />
+      {/* Outfield wall: kick strip / padding / top rail */}
+      <mesh geometry={bands.kick}>
+        <meshStandardMaterial color={COLORS.wallKick} roughness={0.9} side={DoubleSide} />
       </mesh>
+      <mesh geometry={bands.pad}>
+        <meshStandardMaterial
+          ref={padMat}
+          color={COLORS.wall}
+          roughness={0.85}
+          emissive={COLORS.wallRail}
+          emissiveIntensity={0}
+          side={DoubleSide}
+        />
+      </mesh>
+      <mesh geometry={bands.rail}>
+        <meshStandardMaterial color={COLORS.wallRail} roughness={0.55} side={DoubleSide} />
+      </mesh>
+
+      {MARKERS.map(([text, deg]) => (
+        <DistanceMarker key={`${text}:${deg}`} text={text} deg={deg} />
+      ))}
+      <FoulPole deg={-FOUL_DEG} />
+      <FoulPole deg={FOUL_DEG} />
     </group>
   )
 }
