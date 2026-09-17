@@ -2,7 +2,8 @@
 export type SwingCommit = {
   /** performance.now() (or game clock) when the swing was detected */
   atMs: number
-  source: 'pointer' | 'keyboard' | 'pose'
+  /** 'camera' = frame-difference webcam swing; 'pose' reserved for MediaPipe. */
+  source: 'pointer' | 'keyboard' | 'pose' | 'camera'
   /** Stage 2: normalized swing strength 0–1; Stage 1 may pass 1 */
   power?: number
 }

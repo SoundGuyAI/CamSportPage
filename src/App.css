@@ -416,3 +416,193 @@ body {
     padding: 0.5rem;
   }
 }
+
+/* ---------- Input-mode segmented control ---------- */
+
+.seg {
+  display: flex;
+  gap: 0;
+  margin: 0 auto 0.7rem;
+  width: fit-content;
+  border: 1px solid #3d6b4f;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.seg-btn {
+  appearance: none;
+  border: none;
+  padding: 0.35rem 0.7rem;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: #cfe6d7;
+  background: transparent;
+}
+
+.seg-btn + .seg-btn {
+  border-left: 1px solid #3d6b4f;
+}
+
+.seg-btn:hover {
+  color: var(--perfect);
+}
+
+.seg-on {
+  color: #0f1a14;
+  background: var(--perfect);
+}
+
+.seg-on:hover {
+  color: #0f1a14;
+}
+
+/* ---------- Camera panel (top-right of the stage) ---------- */
+
+.campanel {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 3;
+  width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.35rem;
+  border: 1px solid #3d6b4f;
+  border-radius: 10px;
+  background: rgb(15 26 20 / 70%);
+  font-size: 0.68rem;
+  /* Never eat a swing: only the sensitivity slider is interactive. */
+  pointer-events: none;
+}
+
+.campanel input[type='range'] {
+  pointer-events: auto;
+}
+
+.cam-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #0b120e;
+}
+
+.cam-video,
+.cam-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Mirror: you see yourself the way the detector does. */
+  transform: scaleX(-1);
+}
+
+.cam-video {
+  opacity: 0.85;
+}
+
+/* The overlay buffer is already mirrored by CameraInput, so undo the flip. */
+.cam-overlay {
+  transform: none;
+  image-rendering: pixelated;
+}
+
+/* Border flash on every committed swing (keyed on lastFireMs). */
+.cam-fire {
+  position: absolute;
+  inset: 0;
+  border: 3px solid var(--perfect);
+  border-radius: 6px;
+  opacity: 0;
+  animation: cam-fire 320ms ease-out forwards;
+}
+
+@keyframes cam-fire {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.cam-energy {
+  position: relative;
+  height: 7px;
+  border-radius: 4px;
+  background: #1b2b21;
+  overflow: hidden;
+}
+
+.cam-energy-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, #4f9f74, var(--perfect));
+  transition: width 60ms linear;
+}
+
+/* Fires when the bar crosses this mark (full bar = 3x the onset threshold). */
+.cam-energy-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 33.3%;
+  width: 2px;
+  background: var(--warn);
+}
+
+.cam-status {
+  margin: 0;
+  opacity: 0.8;
+  line-height: 1.25;
+}
+
+.cam-status-warn {
+  color: var(--warn);
+  opacity: 1;
+}
+
+.cam-slider {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  opacity: 0.8;
+}
+
+.cam-slider span {
+  white-space: nowrap;
+}
+
+.cam-slider input {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--perfect);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cam-fire {
+    animation-name: cam-fire-hold;
+  }
+
+  @keyframes cam-fire-hold {
+    0%,
+    80% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+}
+
+@media (max-width: 560px) {
+  .campanel {
+    width: 132px;
+    font-size: 0.6rem;
+  }
+}

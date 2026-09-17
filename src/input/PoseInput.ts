@@ -1,4 +1,4 @@
-import type { CommitHandler, InputPort } from './types'
+import type { CommitHandler, InputPort } from './types.ts'
 
 /**
  * Stage 2 stub — webcam / MediaPipe Pose.

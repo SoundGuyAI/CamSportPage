@@ -3,7 +3,7 @@
 **Game:** Baseball batting-only (timing) — see [game-analysis.md](./game-analysis.md)  
 **Hosting:** GitHub Pages (Cloudflare later)  
 **Auth:** none for now  
-**Webcam:** Stage 2 only — architecture prepared in Stage 1  
+**Webcam:** Stage 2 **shipped** — frame-difference motion input, no ML model, no new dependencies  
 
 ---
 
@@ -18,7 +18,8 @@
 | Hosting | **GitHub Pages** | Static SPA via GitHub Actions |
 | Backend | **None (Stage 1)** | Scores stay in-session / `localStorage` only |
 | Auth | **Skipped** | Revisit with Cloudflare/Supabase later |
-| Webcam (Stage 2) | MediaPipe Pose (browser) | No server; feeds existing input adapter |
+| Webcam (Stage 2, shipped) | **Frame differencing** (canvas 2D, 64x48 grayscale diff) | No model, no dependency, no server; feeds the existing `InputPort` |
+| Webcam (optional future) | MediaPipe Pose (browser) | Only if per-joint tracking is ever needed; same adapter seam |
 
 **Explicitly deferred:** Unity WebGL, Cloudflare Workers/D1, Clerk/Supabase Auth, physics engines, online multiplayer.
 
@@ -42,9 +43,11 @@ Stage 1 and Stage 2 share one game core. Only the input source changes.
 │  InputPort (interface)                        │
 │  onCommit(cb) / start() / stop()              │
 ├─────────────┬───────────────────────────────┤
-│ PointerInput│  (Stage 1: click / space)       │
-│ PoseInput   │  (Stage 2: MediaPipe swing)     │
-└─────────────┴───────────────────────────────┘
+│ PointerInput  │  click / space                │
+│ CameraInput   │  webcam frame differencing     │
+│ CompositeInput│  fan-out (camera + pointer)    │
+│ PoseInput     │  stub (optional MediaPipe)     │
+└───────────────┴───────────────────────────────┘
 ```
 
 ### Input contract (lock early)
@@ -55,7 +58,7 @@ export type SwingCommit = {
   /** performance.now() or game clock ms when the swing was detected */
   atMs: number
   /** Optional metadata; Stage 1 may omit or stub these */
-  source: 'pointer' | 'keyboard' | 'pose'
+  source: 'pointer' | 'keyboard' | 'camera' | 'pose'
   /** Stage 2: normalized swing strength 0–1; Stage 1 can pass 1 */
   power?: number
 }
@@ -98,9 +101,12 @@ CamSport/
 │   │   ├── timing.ts
 │   │   └── scoring.ts
 │   ├── input/
-│   │   ├── types.ts          # InputPort, SwingCommit
-│   │   ├── PointerInput.ts   # Stage 1
-│   │   └── PoseInput.ts      # Stage 2 stub (throws / no-op until enabled)
+│   │   ├── types.ts           # InputPort, SwingCommit
+│   │   ├── PointerInput.ts    # click / Space
+│   │   ├── CameraInput.ts     # Stage 2: webcam frame differencing (no ML)
+│   │   ├── CompositeInput.ts  # camera + pointer fan-out
+│   │   ├── createInput.ts     # mode factory
+│   │   └── PoseInput.ts       # stub (optional MediaPipe later)
 │   ├── ui/
 │   └── styles/
 ├── index.html
@@ -142,15 +148,31 @@ No secrets required for public Pages. No auth, no API keys in Stage 1.
 
 ## Stage 1 vs Stage 2
 
-| | Stage 1 (now) | Stage 2 (later) |
+| | Stage 1 | Stage 2 (shipped) |
 |--|---------------|-----------------|
-| Input | `PointerInput` (+ keyboard) | `PoseInput` (MediaPipe) behind same `InputPort` |
-| Hosting | GitHub Pages | Still fine on Pages; pose runs client-side |
-| Backend | None | Optional Cloudflare later for scores |
+| Input | `PointerInput` (+ keyboard) | `CompositeInput([PointerInput, CameraInput])` behind the same `InputPort` |
+| Hosting | GitHub Pages | Still fine on Pages; detection is 100% client-side |
+| Backend | None | Still none |
 | Auth | None | Optional later |
-| Feature flag | `VITE_INPUT_MODE=pointer` | `VITE_INPUT_MODE=pose` |
+| Default flag | `VITE_INPUT_MODE=pointer` | `VITE_INPUT_MODE=camera` (the UI picker + `localStorage['camsport.inputMode']` wins at runtime) |
 
-`PoseInput.ts` ships as a **stub** in Stage 1 so the wiring path exists without pulling MediaPipe until Stage 2.
+### Stage 2 detector (no ML)
+
+`src/input/CameraInput.ts`, modelled on the air-guitar-hero and "Maestro" frame-difference demos:
+
+- mirrored video → **64x48** canvas (`willReadFrequently: true`) → grayscale `(r*77 + g*151 + b*28) >> 8`
+- count pixels with `|Δ| > pixThreshold`, divide by pixel count → motion energy 0..1
+- top ~15% of rows skipped (head); full width is **one** zone (a swing is a big lateral burst)
+- `emaFast` (α 0.55) / `emaSlow` (α 0.05); commit on **onset**:
+  `armed && emaFast > onsetThresh && rise > riseMin && emaFast > emaSlow * 1.55 && now - lastFire > 250 ms`,
+  then disarm until `emaFast < onsetThresh * 0.55`; 400 ms guard after `start()`
+- sensitivity 0..1 (default 0.6, `localStorage['camsport.sensitivity']`) →
+  `pixThreshold = round(38 - 26s)`, `onsetThresh = 0.14 - 0.105s`, `riseMin = onsetThresh * 0.35`
+- `requestVideoFrameCallback` (else `requestAnimationFrame`), preallocated swapped `Uint8Array`s
+- stream kept alive across `stop()/start()` (GameSession restarts input every round); `dispose()` releases the camera
+- privacy: frames never leave the browser; nothing is uploaded or recorded
+
+`PoseInput.ts` remains a **stub**. MediaPipe Pose stays an *optional future adapter* behind the very same `InputPort` — worth it only if we ever need per-joint data (bat angle, handedness); the frame-difference detector covers "swing now" with zero bundle cost. `scripts/check-camera.ts` drives the detector headlessly through its `frameSource` seam.
 
 ---
 

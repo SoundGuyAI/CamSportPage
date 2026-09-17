@@ -1,4 +1,4 @@
-import type { CommitHandler, InputPort, SwingCommit } from './types'
+import type { CommitHandler, InputPort, SwingCommit } from './types.ts'
 
 /** Stage 1: click / pointer / Space commits a swing. */
 export class PointerInput implements InputPort {
