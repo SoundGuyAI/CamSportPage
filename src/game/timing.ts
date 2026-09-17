@@ -7,9 +7,13 @@ export type TimingWindows = {
   contactMs: number
 }
 
+/**
+ * Slightly widened from the original 40/120 for feel: a 100 ms round-trip on
+ * pointer input ate most of the perfect band.
+ */
 export const DEFAULT_WINDOWS: TimingWindows = {
-  perfectMs: 40,
-  contactMs: 120,
+  perfectMs: 50,
+  contactMs: 140,
 }
 
 export function gradeSwing(

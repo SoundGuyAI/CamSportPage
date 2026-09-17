@@ -3,6 +3,10 @@
   background: #0f1a14;
   font-family: 'Segoe UI', system-ui, sans-serif;
   line-height: 1.4;
+
+  --perfect: #7dffb3;
+  --warn: #ffd27a;
+  --bad: #ff8f8f;
 }
 
 * {
@@ -25,19 +29,19 @@ body {
 
 .header {
   text-align: center;
-  padding: 1.5rem 1rem 0.5rem;
+  padding: 0.9rem 1rem 0.2rem;
 }
 
 .header h1 {
   margin: 0;
-  font-size: 2rem;
+  font-size: 1.5rem;
   letter-spacing: 0.04em;
 }
 
 .tagline {
-  margin: 0.35rem 0 0;
-  opacity: 0.75;
-  font-size: 0.95rem;
+  margin: 0.2rem 0 0;
+  opacity: 0.7;
+  font-size: 0.85rem;
 }
 
 .field {
@@ -46,75 +50,369 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1.25rem;
-  padding: 1rem;
+  gap: 0.6rem;
+  padding: 0.6rem 1rem;
+  /* Swings are taps: no double-tap zoom, no text selection on rapid clicks. */
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
 }
+
+/* ---------- HUD ---------- */
 
 .hud {
+  width: min(960px, 92vw, calc(55vh * 16 / 9));
   display: flex;
-  gap: 2rem;
+  align-items: center;
+  gap: 0.9rem;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+  font-size: 0.95rem;
 }
 
-.plate {
-  width: min(420px, 92vw);
-  min-height: 160px;
-  border: 2px solid #3d6b4f;
-  border-radius: 12px;
-  background: #14251b;
+.hud-pitch {
+  white-space: nowrap;
+}
+
+.hud-score {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.score {
+  display: inline-block;
+  font-size: 1.3rem;
+  color: var(--perfect);
+}
+
+.score-bump {
+  animation: score-bump 420ms ease-out;
+}
+
+@keyframes score-bump {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.45);
+    filter: brightness(1.4);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.dots {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 0.3rem;
+}
+
+.dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: #24392c;
+  border: 1px solid #3d6b4f;
+  transition: background-color 180ms ease;
+}
+
+.dot-live {
+  border-color: var(--warn);
+  animation: dot-live 900ms ease-in-out infinite;
+}
+
+@keyframes dot-live {
+  50% {
+    box-shadow: 0 0 0 3px rgb(255 210 122 / 25%);
+  }
+}
+
+.dot-perfect {
+  background: var(--perfect);
+  border-color: var(--perfect);
+}
+
+.dot-early,
+.dot-late {
+  background: var(--warn);
+  border-color: var(--warn);
+}
+
+.dot-miss {
+  background: var(--bad);
+  border-color: var(--bad);
+}
+
+/* ---------- Stage (3D + overlays) ---------- */
+
+.stage {
+  position: relative;
+  width: min(960px, 92vw, calc(55vh * 16 / 9));
+}
+
+/* Transient timing feedback over the scene. Never intercepts the swing. */
+.flash {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 1.25rem;
+  gap: 0.2rem;
+  pointer-events: none;
+  text-align: center;
+  opacity: 0;
+  animation: flash 900ms ease-out forwards;
+  text-shadow: 0 2px 10px rgb(0 0 0 / 65%);
+}
+
+.flash strong {
+  font-size: clamp(2rem, 7vw, 4rem);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.flash span {
+  font-size: clamp(0.9rem, 2vw, 1.15rem);
+  font-weight: 600;
+  color: #fff;
+}
+
+@keyframes flash {
+  0% {
+    opacity: 0;
+    transform: scale(0.75);
+  }
+  18% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+  32% {
+    transform: scale(1);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+}
+
+.flash-perfect strong {
+  color: var(--perfect);
+}
+
+.flash-early strong,
+.flash-late strong {
+  color: var(--warn);
+}
+
+.flash-miss strong {
+  color: var(--bad);
+}
+
+/* Start / end cards float over the scene, which stays visible behind. */
+.card {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: min(380px, 88%);
+  height: fit-content;
+  max-height: 100%;
+  overflow: auto;
+  border: 2px solid #3d6b4f;
+  border-radius: 14px;
+  background: rgb(15 26 20 / 88%);
+  backdrop-filter: blur(3px);
+  padding: 1.1rem 1.25rem;
+  text-align: center;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 45%);
+}
+
+.card h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+}
+
+.card-how {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+
+.card-sub {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.final {
+  margin: 0;
+  font-size: 2.6rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--perfect);
+  font-variant-numeric: tabular-nums;
+}
+
+.tally {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.4rem;
+  margin: 0 0 0.75rem;
+}
+
+.tally dt {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.65;
+}
+
+.tally dd {
+  margin: 0.1rem 0 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.dd-perfect {
+  color: var(--perfect);
+}
+
+.dd-early,
+.dd-late {
+  color: var(--warn);
+}
+
+.dd-miss {
+  color: var(--bad);
+}
+
+/* ---------- Readout ---------- */
+
+.readout {
+  width: min(960px, 92vw, calc(55vh * 16 / 9));
+  min-height: 3.1rem;
   text-align: center;
 }
 
 .cue {
   margin: 0;
-  font-size: 1.15rem;
+  font-size: 0.95rem;
+  opacity: 0.6;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .result {
-  margin: 0.75rem 0 0;
+  margin: 0.2rem 0 0;
+  min-height: 1.4rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
+  font-size: 0.95rem;
 }
 
 .result-perfect {
-  color: #7dffb3;
+  color: var(--perfect);
 }
 
 .result-early,
 .result-late {
-  color: #ffd27a;
+  color: var(--warn);
 }
 
 .result-miss {
-  color: #ff8f8f;
+  color: var(--bad);
 }
+
+/* ---------- Buttons ---------- */
 
 .primary {
   appearance: none;
   border: none;
   border-radius: 8px;
-  padding: 0.75rem 1.5rem;
-  font-size: 1rem;
-  font-weight: 600;
+  padding: 0.7rem 1.4rem;
+  font: inherit;
+  font-weight: 700;
   cursor: pointer;
   color: #0f1a14;
-  background: #7dffb3;
+  background: var(--perfect);
 }
 
 .primary:hover {
   filter: brightness(1.05);
 }
 
+.ghost {
+  appearance: none;
+  border: 1px solid #3d6b4f;
+  border-radius: 6px;
+  padding: 0.25rem 0.6rem;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: #cfe6d7;
+  background: transparent;
+}
+
+.ghost:hover {
+  border-color: var(--perfect);
+  color: var(--perfect);
+}
+
 .footer {
   text-align: center;
-  padding: 1rem;
-  opacity: 0.55;
-  font-size: 0.8rem;
+  padding: 0.6rem 1rem 0.9rem;
+  opacity: 0.5;
+  font-size: 0.72rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .score-bump,
+  .dot-live {
+    animation: none;
+  }
+
+  /* Keep the fade (it has to clear itself) but drop the scale pop. */
+  .flash {
+    animation-name: flash-fade;
+  }
+
+  @keyframes flash-fade {
+    0%,
+    70% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+}
+
+/* Narrow / portrait: stack the HUD, let the page scroll if it must. */
+@media (max-width: 560px) {
+  .hud {
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+  }
+
+  .hud,
+  .stage,
+  .readout {
+    width: min(960px, 96vw);
+  }
+
+  .field {
+    justify-content: flex-start;
+    padding: 0.5rem;
+  }
 }
