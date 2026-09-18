@@ -1,14 +1,19 @@
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
 import type { PerspectiveCamera } from 'three'
 import type { SessionSnapshot } from '../game/types'
 import { pitchProgress } from './ballPath'
 import {
   CAMERA_FOV,
+  CAMERA_FOV_PORTRAIT,
   CAMERA_POSITION,
+  CAMERA_POSITION_PORTRAIT,
   CAMERA_PUSH_FOV,
+  CAMERA_PUSH_FOV_PORTRAIT,
   CAMERA_PUSH_Z,
+  CAMERA_PUSH_Z_PORTRAIT,
   CAMERA_TARGET,
+  CAMERA_TARGET_PORTRAIT,
   clamp01,
   smoothstep,
 } from './constants'
@@ -22,6 +27,30 @@ const HR_IN_MS = 400
 const HR_OUT_MS = 300
 const HR_TARGET_Y = 9.0
 const HR_FOV = 37
+
+type Framing = {
+  fov: number
+  position: [number, number, number]
+  target: [number, number, number]
+  pushFov: number
+  pushZ: number
+}
+
+const LANDSCAPE: Framing = {
+  fov: CAMERA_FOV,
+  position: CAMERA_POSITION,
+  target: CAMERA_TARGET,
+  pushFov: CAMERA_PUSH_FOV,
+  pushZ: CAMERA_PUSH_Z,
+}
+
+const PORTRAIT: Framing = {
+  fov: CAMERA_FOV_PORTRAIT,
+  position: CAMERA_POSITION_PORTRAIT,
+  target: CAMERA_TARGET_PORTRAIT,
+  pushFov: CAMERA_PUSH_FOV_PORTRAIT,
+  pushZ: CAMERA_PUSH_Z_PORTRAIT,
+}
 
 function prefersReducedMotion(): boolean {
   return (
@@ -41,17 +70,21 @@ function prefersReducedMotion(): boolean {
 export function CameraRig({ snapshot }: { snapshot: SessionSnapshot }) {
   const calm = useMemo(() => prefersReducedMotion(), [])
   const lastFov = useRef(0)
+  // §10 item 19: below 560 px the UI hands us a 4:5 stage. Read the *canvas*
+  // size from R3F (it already tracks the element) instead of a window listener.
+  const portrait = useThree((s) => s.size.width < s.size.height)
+  const view = portrait ? PORTRAIT : LANDSCAPE
 
   useFrame((state) => {
     const cam = state.camera as PerspectiveCamera
     const now = performance.now()
     const secs = now / 1000
 
-    let x = CAMERA_POSITION[0]
-    let y = CAMERA_POSITION[1]
-    let z = CAMERA_POSITION[2]
-    let fov = CAMERA_FOV
-    let targetY = CAMERA_TARGET[1]
+    let x = view.position[0]
+    let y = view.position[1]
+    let z = view.position[2]
+    let fov = view.fov
+    let targetY = view.target[1]
     let roll = 0
 
     // idle drift — always on, tiny
@@ -62,8 +95,8 @@ export function CameraRig({ snapshot }: { snapshot: SessionSnapshot }) {
     const t = pitchProgress(snapshot, now)
     if (t >= 0) {
       const k = smoothstep((t - 0.55) / 0.45)
-      fov += (CAMERA_PUSH_FOV - CAMERA_FOV) * k
-      z += (CAMERA_PUSH_Z - CAMERA_POSITION[2]) * k
+      fov += (view.pushFov - view.fov) * k
+      z += (view.pushZ - view.position[2]) * k
     }
 
     const res = snapshot.lastResult
@@ -87,14 +120,14 @@ export function CameraRig({ snapshot }: { snapshot: SessionSnapshot }) {
         else if (e >= HR_IN_MS && e < holdEnd) k = 1
         else if (e >= holdEnd && e < holdEnd + HR_OUT_MS) k = 1 - smoothstep((e - holdEnd) / HR_OUT_MS)
         if (k > 0) {
-          targetY += (HR_TARGET_Y - CAMERA_TARGET[1]) * k
+          targetY += (HR_TARGET_Y - view.target[1]) * k
           fov += (HR_FOV - CAMERA_FOV) * clamp01(k)
         }
       }
     }
 
     cam.position.set(x, y, z)
-    cam.lookAt(CAMERA_TARGET[0], targetY, CAMERA_TARGET[2])
+    cam.lookAt(view.target[0], targetY, view.target[2])
     if (roll !== 0) cam.rotation.z += roll
     if (Math.abs(fov - lastFov.current) > 0.001) {
       cam.fov = fov

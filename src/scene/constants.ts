@@ -73,6 +73,24 @@ export const CAMERA_TARGET: [number, number, number] = [-0.1, 4.4, -58.0]
 export const CAMERA_PUSH_FOV = 32.2
 export const CAMERA_PUSH_Z = 22.6
 
+/**
+ * Portrait variant — §10 item 19. The UI drops the stage to 4:5 below 560 px;
+ * `CameraRig` switches to this preset whenever the *canvas* aspect is < 1, so it
+ * follows the drawing buffer rather than a window listener.
+ *
+ * A vertical FOV of 42° from 23 ft back and 9.2 ft up puts the batter's feet at
+ * −18.9° and the pitcher's head at +1.6° off the camera axis, i.e. both inside
+ * the ±21° half-frame with ~2° of margin at the bottom. (§9 suggests
+ * `[1.4, 8.8, 21]`; that clips the batter's feet at 4:5, so the rig is pulled
+ * 2 ft back and 0.4 ft up.)
+ */
+export const CAMERA_FOV_PORTRAIT = 42
+export const CAMERA_POSITION_PORTRAIT: [number, number, number] = [1.6, 9.2, 23.0]
+export const CAMERA_TARGET_PORTRAIT: [number, number, number] = [-0.1, 4.6, -58.0]
+/** Same −5.3% FOV / −1.3 ft push-in as landscape, so the tension cue is identical. */
+export const CAMERA_PUSH_FOV_PORTRAIT = 39.8
+export const CAMERA_PUSH_Z_PORTRAIT = 21.7
+
 /** Perfect window as pitch progress: ±50 ms of a 1300 ms flight. */
 export const PERFECT_T_MIN = 0.962
 export const PERFECT_T_MAX = 1.038

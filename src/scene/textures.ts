@@ -1,7 +1,9 @@
 /**
  * Every texture in the scene is drawn at runtime on a 2D canvas — zero download,
  * zero external assets, and all of it deterministic (no `Math.random`: the crowd
- * speckle uses the same integer hash as the game code).
+ * speckle uses the same integer hash as the game code). The one exception is the
+ * optional turf albedo tile (§10 item 18), which is *multiplied* into the field
+ * map once it loads; if it never loads the procedural stripes stand alone.
  *
  * Factories are plain functions; components wrap them in `useGeneratedTexture`
  * so each texture is built once and disposed on unmount.
@@ -175,12 +177,101 @@ function rectFt(
 }
 
 /**
- * The whole ground plane in one texture: mow fan, clay infield, infield grass
- * diamond, base paths, chalk, warning track. One-time cost, one draw call.
+ * Turf albedo tile. The map is only 3.2 px/ft, so a 7.5-ft repeat is a ~24 px
+ * tile — downsampling a 512 px grass photo that far averages the blades away and
+ * leaves just 4% relative contrast, which is invisible once it is multiplied over
+ * the stripes. So the tile is *mean-normalised* (average multiply = 1.0, no
+ * darkening, hue preserved) and then its contrast is re-gained to
+ * `TURF_CONTRAST`, i.e. the clump mottling the same photo shows at 96 px.
  */
-export function fieldMapTexture(): CanvasTexture {
-  const ctx = makeCtx(FIELD_MAP_PX, FIELD_MAP_PX)
-  if (!ctx) return finish(ctx)
+export const TURF_REPEAT_FT = 7.5
+/** Target relative standard deviation of the tile luminance. */
+const TURF_CONTRAST = 0.09
+/** Safety rail on the gain, so a flat/black source can never blow up. */
+const TURF_MAX_GAIN = 6
+
+/**
+ * Build the repeating turf pattern: downsample, mean-normalise, re-gain. Returns
+ * `null` on any failure (no 2D context, tainted canvas), which simply means the
+ * field keeps its flat procedural stripes.
+ */
+function turfPattern(ctx: Ctx, img: CanvasImageSource): CanvasPattern | null {
+  const tilePx = Math.max(8, Math.round(TURF_REPEAT_FT * PPF))
+  // Progressive halving, because a single bilinear downsample of a 512 px image
+  // straight to ~24 px would only ever sample four texels of it.
+  let src: CanvasImageSource = img
+  for (let s = 256; s >= tilePx * 2; s >>= 1) {
+    const step = makeCtx(s, s)
+    if (!step) return null
+    step.drawImage(src, 0, 0, s, s)
+    src = step.canvas
+  }
+  const tile = makeCtx(tilePx, tilePx)
+  if (!tile) return null
+  tile.drawImage(src, 0, 0, tilePx, tilePx)
+
+  let data: ImageData
+  try {
+    data = tile.getImageData(0, 0, tilePx, tilePx)
+  } catch {
+    return null // tainted canvas (cross-origin turf) — keep the procedural stripes
+  }
+  const px = data.data
+  const n = tilePx * tilePx
+  let sr = 0
+  let sg = 0
+  let sb = 0
+  for (let i = 0; i < px.length; i += 4) {
+    sr += px[i]
+    sg += px[i + 1]
+    sb += px[i + 2]
+  }
+  const mean = [Math.max(1, sr / n), Math.max(1, sg / n), Math.max(1, sb / n)]
+
+  // Relative luminance spread of the tile, used to work out the contrast gain.
+  const lMean = Math.max(1, 0.3 * mean[0] + 0.59 * mean[1] + 0.11 * mean[2])
+  let varSum = 0
+  for (let i = 0; i < px.length; i += 4) {
+    const d = (0.3 * px[i] + 0.59 * px[i + 1] + 0.11 * px[i + 2]) / lMean - 1
+    varSum += d * d
+  }
+  const relSd = Math.sqrt(varSum / n)
+  const gain = Math.min(TURF_MAX_GAIN, Math.max(1, TURF_CONTRAST / Math.max(relSd, 1e-4)))
+
+  for (let i = 0; i < px.length; i += 4) {
+    for (let c = 0; c < 3; c++) {
+      // Normalise to the tile mean (so the average multiply is exactly 1.0) and
+      // push the deviation back out to a readable amount of mottling.
+      const v = 255 * (1 + gain * (px[i + c] / mean[c] - 1))
+      px[i + c] = Math.max(0, Math.min(255, v))
+    }
+    px[i + 3] = 255
+  }
+  tile.putImageData(data, 0, 0)
+  return ctx.createPattern(tile.canvas, 'repeat')
+}
+
+/** Multiply the turf pattern over the map, optionally inside a clip path. */
+function multiplyTurf(ctx: Ctx, pattern: CanvasPattern, clip?: (c: Ctx) => void) {
+  ctx.save()
+  if (clip) {
+    clip(ctx)
+    ctx.clip()
+  }
+  ctx.globalCompositeOperation = 'multiply'
+  ctx.fillStyle = pattern
+  ctx.fillRect(0, 0, FIELD_MAP_PX, FIELD_MAP_PX)
+  ctx.restore()
+}
+
+/**
+ * The whole ground plane in one painting: mow fan, optional turf grain, clay
+ * infield, infield grass diamond, base paths, chalk, warning track. Idempotent —
+ * it repaints the canvas from scratch, which is how the turf gets folded in
+ * after its image loads.
+ */
+export function paintFieldMap(ctx: Ctx, turf?: CanvasImageSource | null) {
+  const turfPat = turf ? turfPattern(ctx, turf) : null
 
   // 1. everything starts as the far outfield rim colour
   ctx.fillStyle = COLORS.outfieldRim
@@ -197,6 +288,10 @@ export function fieldMapTexture(): CanvasTexture {
     ctx.closePath()
     ctx.fill()
   }
+
+  // 2b. turf albedo grain over the outfield fan, multiplied under everything
+  //      the clay, chalk and warning track paint on top of it later
+  if (turfPat) multiplyTurf(ctx, turfPat)
 
   // 3. six concentric rings at 4% multiply to break up the wedges
   ctx.save()
@@ -270,6 +365,8 @@ export function fieldMapTexture(): CanvasTexture {
   diamondPath(ctx, 45.2)
   ctx.fill()
   ctx.restore()
+  // the diamond is repainted flat above, so it needs its own turf pass
+  if (turfPat) multiplyTurf(ctx, turfPat, (c) => diamondPath(c, 45.2))
 
   // 8. base paths: 6-ft clay bands around the diamond + a mound apron
   for (let i = 0; i < 4; i++) {
@@ -304,8 +401,27 @@ export function fieldMapTexture(): CanvasTexture {
   }
   for (const x of [-2.83, 2.83]) rectFt(ctx, x, 0.5, 4, 6, 0.32, COLORS.chalk)
   rectFt(ctx, 0, 5.2, 3.58, 8, 0.32, COLORS.chalk)
+}
 
+/** The field map as a texture, painted procedurally (no turf image yet). */
+export function fieldMapTexture(): CanvasTexture {
+  const ctx = makeCtx(FIELD_MAP_PX, FIELD_MAP_PX)
+  if (ctx) paintFieldMap(ctx)
   return finish(ctx)
+}
+
+/**
+ * Repaint an existing field map with the turf albedo folded in. Returns `false`
+ * when the texture is not backed by a 2D canvas, so the caller can shrug and
+ * keep the procedural stripes.
+ */
+export function applyTurfToFieldMap(tex: CanvasTexture, turf: CanvasImageSource): boolean {
+  const canvas = tex.image as HTMLCanvasElement | undefined
+  const ctx = canvas && typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null
+  if (!ctx) return false
+  paintFieldMap(ctx, turf)
+  tex.needsUpdate = true
+  return true
 }
 
 // ---------------------------------------------------------------------------

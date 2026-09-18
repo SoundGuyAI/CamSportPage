@@ -13,6 +13,8 @@ import { BATTER_POSITION, CAMERA_FOV, CAMERA_POSITION, CAMERA_TARGET, COLORS, PI
 import { Field } from './Field'
 import { Impact } from './Impact'
 import { Pitcher } from './Pitcher'
+import { PostFx } from './PostFx'
+import type { SceneQuality } from './quality'
 import './scene.css'
 
 export type BattingSceneProps = {
@@ -21,11 +23,29 @@ export type BattingSceneProps = {
   batterUrl?: string
   /** Optional separate model for the pitcher; falls back to `batterUrl`, then to primitives. */
   pitcherUrl?: string
+  /**
+   * Turf albedo tile multiplied under the mow stripes (§10 item 18). Defaults to
+   * the bundled ambientCG Grass004 tile under the Vite base URL; pass `null` to
+   * ship the procedural stripes alone.
+   */
+  turfUrl?: string | null
+  /**
+   * `'auto'` (default) enables bloom only on a capable display — dpr ≥ 1.25,
+   * viewport ≥ 760 px, no `prefers-reduced-motion`, no software renderer.
+   * `'high'` / `'low'` force it on / off.
+   */
+  quality?: SceneQuality
   className?: string
 }
 
 /** ThumbsUp lag after a perfect result (ms). */
 const CELEBRATE_DELAY_MS = 400
+
+/**
+ * Bundled turf tile. Derived from the Vite base URL so the GitHub Pages
+ * deployment (`/CamSportPage/`) and a local dev server both resolve it.
+ */
+const DEFAULT_TURF_URL = `${import.meta.env.BASE_URL}textures/grass004-color.jpg`
 
 /** Shadow map: 1024 over a tight ±34 ft box ≈ 15 px/ft on the batter. */
 const SHADOW_EXTENT = 34
@@ -83,8 +103,16 @@ function dprRange(): [number, number] {
  * derived from its timestamps against `performance.now()`. No physics engine,
  * no imperative tweens, no randomness. See `demo.md` for units + mounting.
  */
-export function BattingScene({ snapshot, batterUrl, pitcherUrl, className }: BattingSceneProps) {
+export function BattingScene({
+  snapshot,
+  batterUrl,
+  pitcherUrl,
+  turfUrl,
+  quality = 'auto',
+  className,
+}: BattingSceneProps) {
   const dpr = useMemo(() => dprRange(), [])
+  const turf = turfUrl === undefined ? DEFAULT_TURF_URL : turfUrl
 
   const last = snapshot.lastResult
   const swingAtMs = last?.commit != null ? last.commit.atMs : null
@@ -116,7 +144,7 @@ export function BattingScene({ snapshot, batterUrl, pitcherUrl, className }: Bat
         <Sun />
 
         <Backdrop />
-        <Field snapshot={snapshot} />
+        <Field snapshot={snapshot} turfUrl={turf} />
 
         <group position={BATTER_POSITION} rotation={[0, Math.PI / 2, 0]}>
           <Batter
@@ -138,6 +166,7 @@ export function BattingScene({ snapshot, batterUrl, pitcherUrl, className }: Bat
         <Ball snapshot={snapshot} />
         <Impact snapshot={snapshot} />
         <CameraRig snapshot={snapshot} />
+        <PostFx quality={quality} />
       </Canvas>
     </div>
   )

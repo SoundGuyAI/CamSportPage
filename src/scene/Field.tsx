@@ -1,7 +1,7 @@
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import { BufferAttribute, BufferGeometry, DoubleSide, Shape } from 'three'
-import type { MeshStandardMaterial } from 'three'
+import type { CanvasTexture, MeshStandardMaterial } from 'three'
 import type { SessionSnapshot } from '../game/types'
 import {
   BASE_POSITIONS,
@@ -18,6 +18,7 @@ import {
 import {
   FIELD_MAP_CENTER_Z,
   FIELD_MAP_FT,
+  applyTurfToFieldMap,
   distanceMarkerTexture,
   fieldMapTexture,
 } from './textures'
@@ -146,14 +147,46 @@ function DistanceMarker({ text, deg }: { text: string; deg: number }) {
 const HR_FLASH_MS = 420
 
 /**
+ * §10 item 18 — fold the optional turf albedo (ambientCG Grass004, CC0) into the
+ * already-painted field map once it downloads, keeping the whole ground plane on
+ * a single material. Any failure (404, decode error, tainted canvas) is silent:
+ * the procedural stripes from item 1 stay exactly as they are.
+ */
+function useTurfUnderlay(map: CanvasTexture, url?: string | null) {
+  useEffect(() => {
+    if (!url || typeof Image === 'undefined') return
+    let live = true
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.decoding = 'async'
+    img.onload = () => {
+      if (live) applyTurfToFieldMap(map, img)
+    }
+    img.src = url
+    return () => {
+      live = false
+      img.onload = null
+    }
+  }, [map, url])
+}
+
+/**
  * The park: one procedural field map on a single plane, plus the pieces that
  * need real height (mound, plate, bases, banded wall, foul poles, markers).
  * See `demo.md` for the coordinate + texture constants.
  */
-export function Field({ snapshot }: { snapshot: SessionSnapshot }) {
+export function Field({
+  snapshot,
+  turfUrl,
+}: {
+  snapshot: SessionSnapshot
+  /** Tiled turf albedo multiplied under the mow stripes; omit for stripes only. */
+  turfUrl?: string | null
+}) {
   const plate = usePlateShape()
   const bands = useWallBands()
   const fieldMap = useGeneratedTexture(fieldMapTexture)
+  useTurfUnderlay(fieldMap, turfUrl)
   const padMat = useRef<MeshStandardMaterial>(null)
 
   useFrame(() => {
