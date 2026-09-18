@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
+import { useAudioSettings, useGameAudio } from './audio/useGameAudio'
+import type { SoundMode } from './audio/types'
 import { GameSession, type SessionSnapshot } from './game/GameSession'
 import { describeResult } from './game/outcome'
 import type { SwingResult } from './game/types'
@@ -77,6 +79,63 @@ function summarise(completed: SwingResult[]) {
   return { perfect, early, late, miss, longestFt }
 }
 
+const SOUND_MODE_LABEL: Record<SoundMode, string> = {
+  real: 'real samples',
+  synth: 'synth',
+}
+
+/**
+ * Inline SVG rather than an emoji glyph: the speaker emoji renders at a
+ * different size (and in a different colour) on every platform, and the muted
+ * variant has no reliable mono-colour form.
+ */
+function SpeakerIcon({ muted }: { muted: boolean }) {
+  return (
+    <svg
+      className="mute-icon"
+      viewBox="0 0 24 24"
+      width="20"
+      height="20"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        d="M4 9.5h3.2L12 5.2v13.6L7.2 14.5H4z"
+        fill="currentColor"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+      {muted ? (
+        <path
+          d="M15.5 9.5l5 5m0-5l-5 5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+      ) : (
+        <>
+          <path
+            d="M15.4 9.2a4 4 0 0 1 0 5.6"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+          />
+          <path
+            d="M18.1 6.8a7.6 7.6 0 0 1 0 10.4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+          />
+        </>
+      )}
+    </svg>
+  )
+}
+
 function App() {
   const sessionRef = useRef<{ session: GameSession; unsub: () => void } | null>(null)
   const [snap, setSnap] = useState<SessionSnapshot>(empty)
@@ -88,6 +147,23 @@ function App() {
   const [sensitivity, setSensitivity] = useState(loadSensitivity)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const overlayRef = useRef<HTMLCanvasElement | null>(null)
+
+  // ---- audio: the hook fires cues off snapshot transitions; the engine owns
+  // the AudioContext, the two backends and the persisted settings.
+  const audio = useGameAudio(snap)
+  const sound = useAudioSettings()
+  const credits = audio.getCredits()
+
+  /**
+   * Every audio control doubles as the unlock gesture, and every one of them
+   * drops focus afterwards: PointerInput listens for Space / Enter on `window`,
+   * so a still-focused button would re-trigger itself on the next swing.
+   */
+  const withUnlock = (event: React.MouseEvent<HTMLButtonElement>, fn: () => void) => {
+    audio.unlock()
+    fn()
+    event.currentTarget.blur()
+  }
 
   const teardown = () => {
     const active = sessionRef.current
@@ -162,6 +238,9 @@ function App() {
     // Drop focus: otherwise a later Space/Enter swing would also re-click this
     // button and restart the round mid-swing.
     event.currentTarget.blur()
+    // Usually the first gesture on the page: create / resume the AudioContext
+    // here so the very first pitch already has sound.
+    audio.unlock()
     teardown()
     // Fresh input per session so stopping the old session never deactivates
     // the listener the new one depends on. The CameraInput itself is shared and
@@ -209,6 +288,46 @@ function App() {
     </div>
   )
 
+  const soundPicker = (
+    <div className="soundbox">
+      <div className="seg seg-sound" role="group" aria-label="Sound backend">
+        <button
+          type="button"
+          className={sound.mode === 'real' ? 'seg-btn seg-on' : 'seg-btn'}
+          aria-pressed={sound.mode === 'real'}
+          onClick={(e) => withUnlock(e, () => audio.setMode('real'))}
+        >
+          Real samples
+        </button>
+        <button
+          type="button"
+          className={sound.mode === 'synth' ? 'seg-btn seg-on' : 'seg-btn'}
+          aria-pressed={sound.mode === 'synth'}
+          onClick={(e) => withUnlock(e, () => audio.setMode('synth'))}
+        >
+          Synth
+        </button>
+      </div>
+      {/* Hidden mid-pitch, exactly like the sensitivity slider. */}
+      {snap.phase === 'pitching' ? null : (
+        <label className="vol-slider">
+          <span>Volume</span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={Math.round(sound.volume * 100)}
+            onChange={(e) => {
+              audio.unlock()
+              audio.setVolume(Number(e.target.value) / 100)
+            }}
+          />
+        </label>
+      )}
+    </div>
+  )
+
   // Full bar = 3x the onset threshold, so the marker sits at one third.
   const onset = camState?.onsetThresh ?? 1
   const energyPct = Math.min(100, Math.round(((camState?.emaFast ?? 0) / (onset * 3)) * 100))
@@ -218,6 +337,17 @@ function App() {
       <header className="header">
         <h1>CamSport — Batting</h1>
         <p className="tagline">Ten pitches. Time your swing.</p>
+
+        <button
+          type="button"
+          className={sound.muted ? 'mute-btn mute-off' : 'mute-btn'}
+          aria-pressed={sound.muted}
+          aria-label={sound.muted ? 'Unmute sounds' : 'Mute sounds'}
+          title={sound.muted ? 'Unmute sounds' : 'Mute sounds'}
+          onClick={(e) => withUnlock(e, () => audio.toggleMuted())}
+        >
+          <SpeakerIcon muted={sound.muted} />
+        </button>
       </header>
 
       <main className="field" role="application" aria-label="Batting lane">
@@ -325,6 +455,7 @@ function App() {
               <p className="card-eyebrow">Batting practice</p>
               <h2>CamSport — Batting</h2>
               {modePicker}
+              {soundPicker}
               <p className="card-how">{howToSwing}</p>
               <p className="card-sub">
                 Dead on = home run. Early pulls it left, late pushes it right.
@@ -366,6 +497,7 @@ function App() {
                 Longest hit: {stats.longestFt > 0 ? `${stats.longestFt} ft` : '—'}
               </p>
               {modePicker}
+              {soundPicker}
               <button type="button" className="primary" onClick={startRound}>
                 Play again
               </button>
@@ -398,8 +530,27 @@ function App() {
             ? 'mouse / keyboard (webcam unavailable)'
             : 'webcam + mouse / keyboard'
           : 'pointer / keyboard'}{' '}
+        · Sounds:{' '}
+        {sound.muted ? `${SOUND_MODE_LABEL[sound.mode]} (muted)` : SOUND_MODE_LABEL[sound.mode]}{' '}
         · 3D model “RobotExpressive” by Tomás Laulhé (Quaternius), modified by Don McCurdy — CC0
         1.0
+        {credits.length > 0 ? (
+          <span className="footer-credits">
+            {credits.map((c) => (
+              <span key={c.id} className="footer-credit">
+                {c.id.replace(/_/g, ' ')}:{' '}
+                {c.source ? (
+                  <a href={c.source} target="_blank" rel="noreferrer noopener">
+                    {c.author ?? 'source'}
+                  </a>
+                ) : (
+                  (c.author ?? 'unknown')
+                )}{' '}
+                — {c.license}
+              </span>
+            ))}
+          </span>
+        ) : null}
       </footer>
     </div>
   )

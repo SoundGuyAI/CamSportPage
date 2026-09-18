@@ -29,21 +29,70 @@ npm run lint         # oxlint
 npx tsc -p tsconfig.app.json --noEmit
 node --experimental-strip-types scripts/check-game.ts     # headless game-loop smoke test
 node --experimental-strip-types scripts/check-camera.ts  # headless webcam-detector test
+node --experimental-strip-types scripts/check-audio.ts   # headless sound-cue mapper test
 npm run preview
 ```
 
 `scripts/check-game.ts` drives `GameSession` with a fake clock and a fake `InputPort` and asserts the phase sequence, grading bands and scoring — no DOM, no browser.
 
+`scripts/check-audio.ts` unit-tests `cuesForTransition` from `src/audio/cues.ts` with literal snapshots (no Web Audio, nothing mocked): every band / hit kind, the whoosh lead time, no double-fire when a snapshot is re-delivered, the round-end applause and bed fade, the consecutive-looking-strike boo rule, and a ten-pitch round whose per-sound cue counts are asserted.
+
 `scripts/check-camera.ts` drives `CameraInput` through its `frameSource` seam with synthetic 64x48 grayscale frames (no camera, no DOM): a static scene and head-band-only motion emit nothing, one burst emits exactly one commit, sustained motion does not emit a second, the debounce holds, quiet frames re-arm, `stop()` / `dispose()` silence it, and `CompositeInput` fans out to both children.
+
+## Sound
+
+Two interchangeable backends behind one facade (`src/audio/AudioEngine.ts`), picked on the start / end card with the **Sound** segmented control, plus a **mute toggle in the header, top-right** (always visible, `aria-pressed`, inline SVG speaker icon).
+
+| Backend | What it is |
+|---|---|
+| **Real samples** (default) | `public/sounds/manifest.json` + the `.ogg` files it names, fetched and `decodeAudioData`-d lazily on first enable, then cached as `AudioBuffer`s. |
+| **Synth** | Pure Web Audio synthesis for every sound — no files, no network. Noise is pre-rendered into cached buffers by a seeded LCG (never `Math.random`), and every filter / envelope number is a constant, so a given sound is bit-identical every time. |
+
+**Fallback is per sound, not per pack.** `SampleBackend` delegates to a shared `SynthBackend` instance for any id that is absent from the manifest, fails to download, or fails to decode. A missing or 404 manifest therefore degrades to *all synth*, silently — the game always has audio. The manifest URL goes through `import.meta.env.BASE_URL`, so it resolves under the GitHub Pages base.
+
+Synth recipes, in short: bat crack = 2-8 ms bandpassed noise burst (~2.5-4 kHz) + a decaying sine "knock" at 185-250 Hz + a highpassed click transient (brighter and louder for `perfect`, duller and lower for `contact`, plus a thin ~5.4 kHz tick for the foul tip); whoosh / whiff = pink noise through a bandpass sweeping 400 -> 1800 Hz over ~250 ms; catcher's mitt = 110 -> 90 Hz sine thump under a lowpassed noise puff; crowd bed = looping brown noise through a ~600 Hz lowpass with two very slow LFOs on level and cutoff; cheers = noise through a 1-2 kHz bandpass swelling over 200 ms then decaying 1.6 s (`big` adds a brighter 2.8 kHz layer and a 2.5 s tail); `ohh` = two detuned sawtooths gliding 220 -> 160 Hz under a lowpass, plus soft air; `boo` = a 110 / 124 / 138 Hz sawtooth cluster with a 4.5 Hz vibrato over 1.2 s; applause = ~220 LCG-placed 4 ms noise clicks pre-rendered into one 2 s buffer; `ui_click` = a 5 ms blip.
+
+### Cues
+
+`src/audio/cues.ts` is a **pure** function of two consecutive `SessionSnapshot`s — `cuesForTransition(prev, next): Cue[]`. No Web Audio, no DOM, no timers, which is what makes it unit-testable. Every trigger is keyed on a monotonic timestamp from the snapshot contract (`current.startedAtMs`, `lastResult.resolvedAtMs`), so a re-render, a re-emitted snapshot or StrictMode's double effect invocation can never double-fire a pitch.
+
+| Transition | Sounds |
+|---|---|
+| round starts (`running` -> true) | `crowd_ambience` loop up (1.2 s fade-in) |
+| pitch released (new `startedAtMs`) | `pitch_whoosh`, scheduled at `contactAtMs - 350 ms` so it peaks on the contact point |
+| `perfect`, kind `homer` | `bat_crack_perfect` + `crowd_cheer_big` (+250 ms) |
+| `perfect`, any other kind | `bat_crack_perfect` + `crowd_cheer_small` (+250 ms) |
+| `early` / `late`, fair | `bat_crack_contact` + `crowd_cheer_small` (+250 ms, ducked to 0.45) |
+| `early` / `late`, foul | `bat_foul_tip` + `crowd_ohh` (+220 ms) |
+| `miss` **with** a swing (`commit !== null`) | `whiff` + `catcher_mitt` (+120 ms) + `crowd_ohh` (+300 ms) |
+| `miss` **without** a swing, 1st in a row | `catcher_mitt` + `crowd_ohh` (+260 ms) |
+| `miss` **without** a swing, 2nd+ in a row | `catcher_mitt` + `crowd_boo` (+260 ms, ducked to 0.5) |
+| round finishes | `applause_end` (+120 ms), then the bed fades out over 1 s starting 1 s later |
+| `stop()` mid-round | bed fades out over 250 ms, no applause |
+
+Absolute scheduling uses `ctx.currentTime + (targetPerfMs - performance.now()) / 1000`, so cue timing is sample-accurate against the game clock rather than `setTimeout`-accurate.
+
+### Settings
+
+Persisted as JSON under `localStorage` key **`camsport.audio`**: `{ mode, muted, volume }`, defaults `{ mode: 'real', muted: false, volume: 0.8 }`.
+
+- **Mute** really means silent: master gain goes to 0 **and** the ambience loop is stopped, so a muted tab makes no sound and does no work. Unmuting brings the bed back if a round is live.
+- The ambience bed also stops while `document.visibilityState === 'hidden'` and resumes when the tab comes back.
+- Browsers require a gesture before audio can start, so `AudioEngine.unlock()` (create / resume the `AudioContext`) is called from **Start round**, the mute button, the backend buttons and the volume slider. The volume slider is hidden during `phase === 'pitching'`, like the sensitivity slider.
+- The mute button `blur()`s itself after a click: `PointerInput` listens for `Space` / `Enter` on `window`, so a still-focused button would re-trigger itself on the next swing.
+- The footer prints the active backend, and renders an attribution line per manifest entry whose license needs one (`getCredits()` filters for CC-BY-style licenses; the shipped pack is all CC0, so it prints nothing).
+
+`window.__camsportAudio` exposes the engine for manual poking: `__camsportAudio.context.state`, `.masterGain`, `.setMode('synth')`, `.play('bat_crack_perfect')`.
 
 ## Architecture
 
-Three layers, one-way data flow:
+Four layers, one-way data flow:
 
 | Layer | Path | Responsibility |
 |---|---|---|
 | Input | `src/input/` | `InputPort` adapters (`start` / `stop` / `onCommit`) emitting `SwingCommit { atMs, source, power? }`. `PointerInput` = window `pointerdown` + `Space`/`Enter`; `CameraInput` = webcam frame differencing; `CompositeInput` fans out to both; `PoseInput` stays a stub. |
 | Game | `src/game/` | `GameSession` owns the loop (pre-pitch delay → pitch → grade → result hold → next). Pure logic: no DOM, no camera, no `Math.random`, time via an injectable `Scheduler`. Publishes an immutable `SessionSnapshot` (contract in `src/game/types.ts`). |
+| Audio | `src/audio/` | `AudioEngine` facade over two `SoundBackend`s (`SampleBackend` -> `SynthBackend` per-sound fallback). `cues.ts` maps snapshot transitions to cues as a pure function; `useGameAudio` is the only React glue. No `Math.random` (seeded LCG). |
 | Presentation | `src/scene/`, `src/App.tsx` | Consume `SessionSnapshot` only. All ball / bat motion is derived from snapshot timestamps against `performance.now()` — no physics engine, no imperative tweens. See [`src/scene/demo.md`](src/scene/demo.md). |
 
 `App.tsx` builds a fresh `GameSession(createInput(mode, cameraRef.current), 10)` per round and tears the old one down (unsubscribe **then** stop) before starting the next, and on unmount — a shared input would otherwise be deactivated by the old session's `stop()`, and the old session's final emit would clobber the new snapshot. The `CameraInput` *is* shared and long-lived (one per webcam session, held in a ref): `stop()` only parks the detector and keeps the `MediaStream`, so re-arming between rounds costs nothing and never re-prompts; only `dispose()` releases the camera.

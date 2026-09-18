@@ -11,8 +11,53 @@
 }
 
 .header {
+  position: relative;
   text-align: center;
-  padding: 0.9rem 1rem 0.35rem;
+  padding: 0.9rem 3.4rem 0.35rem;
+}
+
+/* ---------- Mute toggle (header, top-right, always visible) ---------- */
+
+.mute-btn {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  appearance: none;
+  border: 1px solid var(--panel-line);
+  border-radius: 999px;
+  cursor: pointer;
+  color: var(--text-2);
+  background: var(--chip);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.mute-btn:hover {
+  color: var(--perfect);
+  border-color: var(--perfect);
+}
+
+/* Pressed = muted. Warn amber so "sound is off" reads at a glance. */
+.mute-off {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.mute-off:hover {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.mute-icon {
+  display: block;
+  pointer-events: none;
 }
 
 .header h1 {
@@ -616,6 +661,59 @@
   background: var(--btn);
 }
 
+/* ---------- Sound backend picker + volume (start / end card) ---------- */
+
+.soundbox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 auto 0.8rem;
+  width: 100%;
+}
+
+/* The mode picker above already supplied the bottom margin for the group. */
+.seg-sound {
+  margin-bottom: 0;
+}
+
+.vol-slider {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: min(220px, 100%);
+  color: var(--text-2);
+  font-size: 0.72rem;
+}
+
+.vol-slider span {
+  white-space: nowrap;
+}
+
+.vol-slider input {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--perfect);
+}
+
+/* ---------- Footer sample attribution (CC-BY entries only) ---------- */
+
+.footer-credits {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  margin-top: 0.3rem;
+  font-size: 0.66rem;
+  line-height: 1.35;
+}
+
+.footer-credit a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* ---------- Camera panel ----------
    Bottom-left of the stage: the top-right corner now belongs to the score. */
 
@@ -757,7 +855,8 @@
     outline-color: var(--warn);
   }
 
-  .primary {
+  .primary,
+  .mute-btn {
     transition: none;
   }
 
@@ -817,7 +916,14 @@
   }
 
   .header {
-    padding: 0.6rem 1rem 0.2rem;
+    padding: 0.6rem 2.9rem 0.2rem;
+  }
+
+  .mute-btn {
+    top: 0.45rem;
+    right: 0.5rem;
+    width: 2rem;
+    height: 2rem;
   }
 
   /* HUD collapses to a single row across the top. */

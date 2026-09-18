@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "sounds": {
+    "crowd_ambience":    { "file": "crowd_ambience.ogg",    "loop": true,  "gain": 0.35, "license": "CC0", "source": "https://freesound.org/s/424295/", "author": "Douglas711" },
+    "pitch_whoosh":      { "file": "pitch_whoosh.ogg",      "loop": false, "gain": 0.6,  "license": "CC0", "source": "https://freesound.org/s/507466/", "author": "Danjocross" },
+    "catcher_mitt":      { "file": "catcher_mitt.ogg",      "loop": false, "gain": 0.7,  "license": "CC0", "source": "https://freesound.org/s/164499/", "author": "martinimeniscus" },
+    "bat_crack_perfect": { "file": "bat_crack_perfect.ogg", "loop": false, "gain": 1.0,  "license": "CC0", "source": "https://freesound.org/s/851452/", "author": "hashtagsmcgee" },
+    "bat_crack_contact": { "file": "bat_crack_contact.ogg", "loop": false, "gain": 0.8,  "license": "CC0", "source": "https://freesound.org/s/162886/", "author": "martinimeniscus" },
+    "bat_foul_tip":      { "file": "bat_foul_tip.ogg",      "loop": false, "gain": 0.6,  "license": "CC0", "source": "https://freesound.org/s/457039/", "author": "Breviceps" },
+    "whiff":             { "file": "whiff.ogg",             "loop": false, "gain": 0.55, "license": "CC0", "source": "https://freesound.org/s/420668/", "author": "SypherZent" },
+    "crowd_cheer_big":   { "file": "crowd_cheer_big.ogg",   "loop": false, "gain": 0.85, "license": "CC0", "source": "https://freesound.org/s/649156/", "author": "tylermyers1992" },
+    "crowd_cheer_small": { "file": "crowd_cheer_small.ogg", "loop": false, "gain": 0.6,  "license": "CC0", "source": "https://freesound.org/s/752709/", "author": "Nox_Sound" },
+    "crowd_ohh":         { "file": "crowd_ohh.ogg",         "loop": false, "gain": 0.55, "license": "CC0", "source": "https://freesound.org/s/619007/", "author": "mrrap4food" },
+    "crowd_boo":         { "file": "crowd_boo.ogg",         "loop": false, "gain": 0.6,  "license": "CC0", "source": "https://freesound.org/s/752707/", "author": "Nox_Sound" },
+    "applause_end":      { "file": "applause_end.ogg",      "loop": false, "gain": 0.7,  "license": "CC0", "source": "https://freesound.org/s/854882/", "author": "qubodup" },
+    "ui_click":          { "file": "ui_click.ogg",          "loop": false, "gain": 0.4,  "license": "CC0", "source": "https://kenney.nl/assets/ui-audio", "author": "Kenney" }
+  }
+}
