@@ -146,3 +146,5 @@ Raise it if your swings are missed (dim room, small motion, far from the camera)
 
 - [Game analysis](docs/game-analysis.md) — why batting (complexity / credit cost)
 - [Tech stack](docs/tech-stack.md) — Vite + React + GitHub Pages, webcam-ready architecture
+- [Art direction](docs/art-direction.md) — palette, field, lighting, readability spec
+- [Prompt log](docs/prompts.md) — every instruction from the build session, verbatim
