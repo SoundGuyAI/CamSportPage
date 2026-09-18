@@ -39,6 +39,9 @@ jobs:
           path: dist
 
   deploy:
+    # Only the Pages repo has a Pages site; the source repo (SoundGuyAI/CamSport)
+    # runs the build as CI but must not try to deploy (deploy-pages 404s there).
+    if: github.repository == 'SoundGuyAI/CamSportPage'
     needs: build
     runs-on: ubuntu-latest
     environment:

@@ -864,9 +864,12 @@
     bottom: calc(0.6rem + env(safe-area-inset-bottom, 0px));
   }
 
+  /* Phones: bottom-right, clear of the batter / contact zone on the left. */
   .campanel {
     width: 132px;
     font-size: 0.6rem;
+    left: auto;
+    right: 0.55rem;
     bottom: calc(1.9rem + env(safe-area-inset-bottom, 0px));
   }
 }
